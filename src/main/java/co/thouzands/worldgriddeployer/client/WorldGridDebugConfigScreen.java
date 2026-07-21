@@ -138,7 +138,9 @@ final class WorldGridDebugConfigScreen extends WorldGridConfigScreenBase {
             toggle,
             true,
             tipTitle("worldgriddeployer.config.debug." + key),
-            tip("worldgriddeployer.config.debug." + key + ".tooltip")
+            tip(key.equals("outcomes") && (this.minecraft == null || this.minecraft.level == null)
+                ? "worldgriddeployer.config.debug.outcomes.offline.tooltip"
+                : "worldgriddeployer.config.debug." + key + ".tooltip")
         );
         this.addButton(
             center + 59, y, 95, 21,

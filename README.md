@@ -212,13 +212,15 @@ a denied request creates no outcome records, packets, blocked work, or
 per-candidate player scan. Explicit `outcomes off`, logout, and server shutdown
 discard the request.
 
-Client debug state is scoped to one connection. Logging out clears all captured
-geometry and outcomes, forgets last traversal samples, disables every overlay,
-and restores the default lifetimes. Logging in also performs the same reset as a
-defensive fallback, so changing worlds or servers cannot carry a subscription or
-history into the next session. The server's subscriber sets and pending outcome
-batches are cleared on player logout or server shutdown; only the per-world
-access policy above is deliberately persistent.
+Captured client debug data is scoped to one connection. Logging out clears all
+geometry and outcomes, forgets traversal samples, and releases the live outcome
+subscription. Client viewing preferences are retained in memory, however, so
+the Debug Overlays page remains useful from the Mods screen without an active
+world. The next login starts empty histories and reapplies those preferences;
+no points, blocks, outcomes, or server authorization carry between connections.
+The server's subscriber sets and pending outcome batches are cleared on player
+logout or server shutdown; only the per-world access policy above is deliberately
+persistent.
 
 ## Visual debugging
 

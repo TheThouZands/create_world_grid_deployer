@@ -47,6 +47,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
 @EventBusSubscriber(modid = CreateWorldGridDeployer.MOD_ID, value = Dist.CLIENT)
 public final class WorldGridDebugClient {
     private static final WorldGridDebugHistory HISTORY = new WorldGridDebugHistory();
+    private static DebugSettings preferredSettings = defaultSettings();
     private static final float[] OUTCOME_PLACED = { 0.15f, 1.0f, 0.20f };
     private static final float[] OUTCOME_REJECTED = { 1.0f, 0.12f, 0.10f };
     private static final float[] OUTCOME_UNLOADED = { 0.62f, 0.20f, 1.0f };
@@ -103,6 +104,13 @@ public final class WorldGridDebugClient {
     }
 
     public static DebugSettings settings() {
+        if (Minecraft.getInstance().level == null) {
+            return preferredSettings;
+        }
+        return currentSettings();
+    }
+
+    private static DebugSettings currentSettings() {
         return new DebugSettings(
             HISTORY.targetsEnabled(),
             HISTORY.pointPathEnabled(),
@@ -115,6 +123,14 @@ public final class WorldGridDebugClient {
     }
 
     public static void applySettings(DebugSettings settings) {
+        preferredSettings = settings;
+        if (Minecraft.getInstance().level == null) {
+            return;
+        }
+        applyToSession(settings);
+    }
+
+    private static void applyToSession(DebugSettings settings) {
         HISTORY.setTargetsEnabled(settings.targetsEnabled());
         applyPointPath(settings.pointPathEnabled(), settings.pointLifetimeTicks());
         applyBlockTrail(settings.blockTrailEnabled(), settings.blockLifetimeTicks());
@@ -190,6 +206,7 @@ public final class WorldGridDebugClient {
 
     @SubscribeEvent
     public static void loggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
+        preferredSettings = currentSettings();
         HISTORY.resetSession();
         WorldGridSettingsClient.reset();
     }
@@ -200,6 +217,7 @@ public final class WorldGridDebugClient {
         // not run (for example, an interrupted or failed connection transition).
         HISTORY.resetSession();
         WorldGridSettingsClient.reset();
+        applyToSession(preferredSettings);
     }
 
     @SubscribeEvent
@@ -563,4 +581,16 @@ public final class WorldGridDebugClient {
         boolean outcomesEnabled,
         int outcomeLifetimeTicks
     ) {}
+
+    private static DebugSettings defaultSettings() {
+        return new DebugSettings(
+            false,
+            false,
+            WorldGridDebugHistory.DEFAULT_LIFETIME_TICKS,
+            false,
+            WorldGridDebugHistory.DEFAULT_LIFETIME_TICKS,
+            false,
+            WorldGridDebugHistory.DEFAULT_LIFETIME_TICKS
+        );
+    }
 }

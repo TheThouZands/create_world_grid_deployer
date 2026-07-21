@@ -20,14 +20,14 @@ public final class WorldGridConfigScreen extends WorldGridConfigScreenBase {
         boolean inWorld = this.minecraft != null && this.minecraft.level != null;
         this.addButton(
             center - 110,
-            top + 42,
+            top + 50,
             220,
             24,
             Component.translatable("worldgriddeployer.config.debug"),
             () -> this.open(new WorldGridDebugConfigScreen(this)),
-            inWorld,
+            true,
             tipTitle("worldgriddeployer.config.debug"),
-            tip(inWorld ? "worldgriddeployer.config.debug.tooltip" : "worldgriddeployer.config.world_required")
+            tip(inWorld ? "worldgriddeployer.config.debug.tooltip" : "worldgriddeployer.config.debug.offline.tooltip")
         );
 
         boolean privateSingleplayer = inWorld
@@ -36,7 +36,7 @@ public final class WorldGridConfigScreen extends WorldGridConfigScreenBase {
         boolean accessAvailable = inWorld && !privateSingleplayer;
         this.addButton(
             center - 110,
-            top + 76,
+            top + 84,
             220,
             24,
             Component.translatable("worldgriddeployer.config.access"),
@@ -52,7 +52,7 @@ public final class WorldGridConfigScreen extends WorldGridConfigScreenBase {
 
         this.addButton(
             center - 60,
-            top + 120,
+            top + 128,
             120,
             20,
             Component.translatable("gui.done"),
