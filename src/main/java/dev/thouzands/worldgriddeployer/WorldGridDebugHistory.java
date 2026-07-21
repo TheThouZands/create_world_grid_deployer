@@ -220,6 +220,22 @@ public final class WorldGridDebugHistory {
         this.lastSamples.clear();
     }
 
+    /**
+     * Releases all state owned by the current client connection. Debugging is
+     * intentionally opt-in again after joining another world or server.
+     */
+    public void resetSession() {
+        this.targetsEnabled = false;
+        this.pointPathEnabled = false;
+        this.blockTrailEnabled = false;
+        this.outcomesEnabled = false;
+        this.pointLifetimeTicks = DEFAULT_LIFETIME_TICKS;
+        this.blockLifetimeTicks = DEFAULT_LIFETIME_TICKS;
+        this.outcomeLifetimeTicks = DEFAULT_LIFETIME_TICKS;
+        this.tick = 0L;
+        this.clearData();
+    }
+
     private void capturePoint(DeployerKey key, Vec3 target, boolean discontinuity) {
         Deque<TimedPoint> points = this.pointPaths.computeIfAbsent(key, ignored -> new ArrayDeque<>());
         TimedPoint last = points.peekLast();

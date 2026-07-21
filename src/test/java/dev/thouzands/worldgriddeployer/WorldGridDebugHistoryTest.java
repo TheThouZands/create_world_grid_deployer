@@ -101,6 +101,35 @@ class WorldGridDebugHistoryTest {
         assertTrue(history.outcomes().isEmpty());
     }
 
+    @Test
+    void sessionResetDisablesDebuggingAndReleasesAllCollectedState() {
+        WorldGridDebugHistory history = new WorldGridDebugHistory();
+        BlockPos position = new BlockPos(7, 8, 9);
+        history.setTargetsEnabled(true);
+        history.startPointPath(40);
+        history.startBlockTrail(60);
+        history.startOutcomes(80);
+        history.capture(KEY, new Vec3(1.25, 2.5, 3.75), true);
+        history.recordOutcomes(List.of(new OutcomeEntry(position, WorldGridPlacementOutcome.PLACED)));
+        history.advanceTick();
+
+        history.resetSession();
+
+        assertFalse(history.isCapturing());
+        assertFalse(history.targetsEnabled());
+        assertFalse(history.pointPathEnabled());
+        assertFalse(history.blockTrailEnabled());
+        assertFalse(history.outcomesEnabled());
+        assertTrue(history.liveTargets().isEmpty());
+        assertTrue(history.pointPaths().isEmpty());
+        assertTrue(history.blockTrail().isEmpty());
+        assertTrue(history.outcomes().isEmpty());
+        assertEquals(WorldGridDebugHistory.DEFAULT_LIFETIME_TICKS, history.pointLifetimeTicks());
+        assertEquals(WorldGridDebugHistory.DEFAULT_LIFETIME_TICKS, history.blockLifetimeTicks());
+        assertEquals(WorldGridDebugHistory.DEFAULT_LIFETIME_TICKS, history.outcomeLifetimeTicks());
+        assertEquals(0L, history.tick());
+    }
+
     private static Set<BlockPos> positions(WorldGridDebugHistory history) {
         return history.blockTrail().stream()
             .map(WorldGridDebugHistory.TimedBlock::position)

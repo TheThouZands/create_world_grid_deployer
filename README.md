@@ -167,6 +167,14 @@ a denied request creates no outcome records, packets, blocked work, or
 per-candidate player scan. Explicit `outcomes off`, logout, and server shutdown
 discard the request.
 
+Client debug state is scoped to one connection. Logging out clears all captured
+geometry and outcomes, forgets last traversal samples, disables every overlay,
+and restores the default lifetimes. Logging in also performs the same reset as a
+defensive fallback, so changing worlds or servers cannot carry a subscription or
+history into the next session. The server's subscriber sets and pending outcome
+batches are cleared on player logout or server shutdown; only the per-world
+access policy above is deliberately persistent.
+
 ## Visual debugging
 
 All commands are client commands and require this mod on that client. Overlays
@@ -273,5 +281,6 @@ The build expects the exact Create and Sable jars in the sibling server's
 ```
 
 The unit suite covers face-connected traversal, per-tick traversal limits,
-debug-history expiry, authoritative outcome replacement/expiry, debug access
-policy and persistence, and network payload round trips.
+debug-history expiry and session reset, authoritative outcome
+replacement/expiry, debug access policy and persistence, and network payload
+round trips.

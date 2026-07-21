@@ -131,14 +131,14 @@ public final class WorldGridDebugClient {
 
     @SubscribeEvent
     public static void loggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
-        HISTORY.clearData();
+        HISTORY.resetSession();
     }
 
     @SubscribeEvent
     public static void loggingIn(ClientPlayerNetworkEvent.LoggingIn event) {
-        if (HISTORY.outcomesEnabled()) {
-            sendOutcomeSubscription(true);
-        }
+        // Defensive reset for connection paths where the prior logout event did
+        // not run (for example, an interrupted or failed connection transition).
+        HISTORY.resetSession();
     }
 
     @SubscribeEvent
