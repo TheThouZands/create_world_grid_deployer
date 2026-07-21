@@ -1,6 +1,7 @@
 package dev.thouzands.worldgriddeployer;
 
 import dev.thouzands.worldgriddeployer.FaceConnectedVoxelTraversal.Step;
+import dev.thouzands.worldgriddeployer.WorldGridDebugNetworking.OutcomeEntry;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashMap;
@@ -31,17 +32,24 @@ public final class WorldGridDebugHistory {
     private final Map<DeployerKey, LiveTarget> liveTargets = new HashMap<>();
     private final Map<DeployerKey, Deque<TimedPoint>> pointPaths = new HashMap<>();
     private final LinkedHashMap<BlockPos, TimedBlock> blockTrail = new LinkedHashMap<>();
+    private final LinkedHashMap<BlockPos, TimedOutcome> outcomes = new LinkedHashMap<>();
     private final Map<DeployerKey, LastSample> lastSamples = new HashMap<>();
 
     private boolean targetsEnabled;
     private boolean pointPathEnabled;
     private boolean blockTrailEnabled;
+    private boolean outcomesEnabled;
     private int pointLifetimeTicks = DEFAULT_LIFETIME_TICKS;
     private int blockLifetimeTicks = DEFAULT_LIFETIME_TICKS;
+    private int outcomeLifetimeTicks = DEFAULT_LIFETIME_TICKS;
     private long tick;
     private int pointCount;
 
     public boolean isCapturing() {
+        return this.needsLocalCapture() || this.outcomesEnabled;
+    }
+
+    public boolean needsLocalCapture() {
         return this.targetsEnabled || this.pointPathEnabled || this.blockTrailEnabled;
     }
 
@@ -57,12 +65,20 @@ public final class WorldGridDebugHistory {
         return this.blockTrailEnabled;
     }
 
+    public boolean outcomesEnabled() {
+        return this.outcomesEnabled;
+    }
+
     public int pointLifetimeTicks() {
         return this.pointLifetimeTicks;
     }
 
     public int blockLifetimeTicks() {
         return this.blockLifetimeTicks;
+    }
+
+    public int outcomeLifetimeTicks() {
+        return this.outcomeLifetimeTicks;
     }
 
     public long tick() {
@@ -102,8 +118,19 @@ public final class WorldGridDebugHistory {
         this.clearUnusedLastSamples();
     }
 
+    public void startOutcomes(int lifetimeTicks) {
+        this.outcomeLifetimeTicks = checkedLifetime(lifetimeTicks);
+        this.outcomesEnabled = true;
+        this.clearOutcomes();
+    }
+
+    public void stopOutcomes() {
+        this.outcomesEnabled = false;
+        this.clearOutcomes();
+    }
+
     public void capture(DeployerKey key, Vec3 target, boolean powered) {
-        if (!this.isCapturing() || !isFinite(target)) {
+        if (!this.needsLocalCapture() || !isFinite(target)) {
             return;
         }
 
@@ -151,6 +178,26 @@ public final class WorldGridDebugHistory {
         return List.copyOf(this.blockTrail.values());
     }
 
+    public List<TimedOutcome> outcomes() {
+        return List.copyOf(this.outcomes.values());
+    }
+
+    public void recordOutcomes(List<OutcomeEntry> entries) {
+        if (!this.outcomesEnabled) {
+            return;
+        }
+        for (OutcomeEntry entry : entries) {
+            BlockPos position = entry.position().immutable();
+            this.outcomes.remove(position);
+            this.outcomes.put(position, new TimedOutcome(position, entry.outcome(), this.tick));
+        }
+        while (this.outcomes.size() > MAX_HISTORY_ENTRIES) {
+            Iterator<BlockPos> positions = this.outcomes.keySet().iterator();
+            positions.next();
+            positions.remove();
+        }
+    }
+
     public void clearPointPath() {
         this.pointPaths.clear();
         this.pointCount = 0;
@@ -160,11 +207,16 @@ public final class WorldGridDebugHistory {
         this.blockTrail.clear();
     }
 
+    public void clearOutcomes() {
+        this.outcomes.clear();
+    }
+
     /** Clears collected geometry while retaining which categories are enabled. */
     public void clearData() {
         this.liveTargets.clear();
         this.clearPointPath();
         this.clearBlockTrail();
+        this.clearOutcomes();
         this.lastSamples.clear();
     }
 
@@ -228,6 +280,10 @@ public final class WorldGridDebugHistory {
             this.blockTrail.values().removeIf(block -> this.tick - block.createdTick() > this.blockLifetimeTicks);
         }
 
+        if (this.outcomesEnabled) {
+            this.outcomes.values().removeIf(outcome -> this.tick - outcome.createdTick() > this.outcomeLifetimeTicks);
+        }
+
         this.lastSamples.entrySet().removeIf(entry -> this.tick - entry.getValue().tick() > LIVE_TARGET_LIFETIME_TICKS);
     }
 
@@ -284,6 +340,8 @@ public final class WorldGridDebugHistory {
     public record TimedPoint(Vec3 position, long createdTick, boolean breakBefore) {}
 
     public record TimedBlock(BlockPos position, long createdTick) {}
+
+    public record TimedOutcome(BlockPos position, WorldGridPlacementOutcome outcome, long createdTick) {}
 
     private record LastSample(Vec3 target, long tick) {}
 }

@@ -6,6 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.thouzands.worldgriddeployer.WorldGridDebugHistory.DeployerKey;
+import dev.thouzands.worldgriddeployer.WorldGridDebugNetworking.OutcomeEntry;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -78,6 +80,25 @@ class WorldGridDebugHistoryTest {
             IllegalArgumentException.class,
             () -> history.startBlockTrail(WorldGridDebugHistory.MAX_LIFETIME_TICKS + 1)
         );
+    }
+
+    @Test
+    void authoritativeOutcomesOverwritePerCellAndExpire() {
+        WorldGridDebugHistory history = new WorldGridDebugHistory();
+        BlockPos position = new BlockPos(7, 8, 9);
+        history.startOutcomes(2);
+
+        history.recordOutcomes(List.of(new OutcomeEntry(position, WorldGridPlacementOutcome.CREATE_REJECTED)));
+        history.recordOutcomes(List.of(new OutcomeEntry(position, WorldGridPlacementOutcome.PLACED)));
+
+        assertEquals(1, history.outcomes().size());
+        assertEquals(WorldGridPlacementOutcome.PLACED, history.outcomes().getFirst().outcome());
+
+        history.advanceTick();
+        history.advanceTick();
+        assertEquals(1, history.outcomes().size());
+        history.advanceTick();
+        assertTrue(history.outcomes().isEmpty());
     }
 
     private static Set<BlockPos> positions(WorldGridDebugHistory history) {

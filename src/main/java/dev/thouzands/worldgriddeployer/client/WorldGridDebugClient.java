@@ -12,11 +12,15 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import dev.thouzands.worldgriddeployer.CreateWorldGridDeployer;
+import dev.thouzands.worldgriddeployer.WorldGridDebugNetworking.DebugSubscriptionPayload;
+import dev.thouzands.worldgriddeployer.WorldGridDebugNetworking.OutcomeEntry;
 import dev.thouzands.worldgriddeployer.WorldGridDebugHistory;
 import dev.thouzands.worldgriddeployer.WorldGridDebugHistory.DeployerKey;
 import dev.thouzands.worldgriddeployer.WorldGridDebugHistory.LiveTarget;
 import dev.thouzands.worldgriddeployer.WorldGridDebugHistory.TimedBlock;
 import dev.thouzands.worldgriddeployer.WorldGridDebugHistory.TimedPoint;
+import dev.thouzands.worldgriddeployer.WorldGridDebugHistory.TimedOutcome;
+import dev.thouzands.worldgriddeployer.WorldGridPlacementOutcome;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalDouble;
@@ -37,11 +41,19 @@ import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 /** Client-only command, collection, and rendering entry point. */
 @EventBusSubscriber(modid = CreateWorldGridDeployer.MOD_ID, value = Dist.CLIENT)
 public final class WorldGridDebugClient {
     private static final WorldGridDebugHistory HISTORY = new WorldGridDebugHistory();
+    private static final float[] OUTCOME_PLACED = { 0.15f, 1.0f, 0.20f };
+    private static final float[] OUTCOME_REJECTED = { 1.0f, 0.12f, 0.10f };
+    private static final float[] OUTCOME_UNLOADED = { 0.62f, 0.20f, 1.0f };
+    private static final float[] OUTCOME_OCCUPIED = { 0.65f, 0.65f, 0.65f };
+    private static final float[] OUTCOME_NO_ITEM = { 1.0f, 0.48f, 0.05f };
+    private static final float[] OUTCOME_NO_POWER = { 1.0f, 0.92f, 0.10f };
+    private static final float[] OUTCOME_REDSTONE = { 1.0f, 0.10f, 0.72f };
 
     private static final RenderType OVERLAY_LINES = RenderType.create(
         "worldgriddeployer_debug_lines",
@@ -79,11 +91,15 @@ public final class WorldGridDebugClient {
     private WorldGridDebugClient() {}
 
     public static boolean isCapturing() {
-        return HISTORY.isCapturing();
+        return HISTORY.needsLocalCapture();
     }
 
     public static void capture(DeployerKey key, Vec3 target, boolean powered) {
         HISTORY.capture(key, target, powered);
+    }
+
+    public static void receiveOutcomes(List<OutcomeEntry> entries) {
+        HISTORY.recordOutcomes(entries);
     }
 
     @SubscribeEvent
@@ -96,6 +112,7 @@ public final class WorldGridDebugClient {
                 .then(literal("off").executes(context -> setTargets(context, false))))
             .then(historyCommand("point_path", true))
             .then(historyCommand("block_trail", false))
+            .then(outcomesCommand())
             .then(literal("all")
                 .then(literal("on").executes(WorldGridDebugClient::enableAll))
                 .then(literal("off").executes(WorldGridDebugClient::disableAll)))
@@ -115,6 +132,13 @@ public final class WorldGridDebugClient {
     @SubscribeEvent
     public static void loggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
         HISTORY.clearData();
+    }
+
+    @SubscribeEvent
+    public static void loggingIn(ClientPlayerNetworkEvent.LoggingIn event) {
+        if (HISTORY.outcomesEnabled()) {
+            sendOutcomeSubscription(true);
+        }
     }
 
     @SubscribeEvent
@@ -147,6 +171,9 @@ public final class WorldGridDebugClient {
         if (HISTORY.pointPathEnabled()) {
             renderPointPaths(poseStack, lines);
         }
+        if (HISTORY.outcomesEnabled()) {
+            renderOutcomes(poseStack, lines, fill);
+        }
         if (HISTORY.targetsEnabled()) {
             renderLiveTargets(poseStack, lines, fill);
         }
@@ -174,6 +201,25 @@ public final class WorldGridDebugClient {
                     .then(literal("seconds").executes(context -> startHistorySeconds(context, points)))))
             .then(literal("off").executes(context -> stopHistory(context, points)))
             .then(literal("clear").executes(context -> clearHistory(context, points)));
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> outcomesCommand() {
+        return literal("outcomes")
+            .then(literal("on")
+                .executes(context -> startOutcomes(context, HISTORY.outcomeLifetimeTicks()))
+                .then(argument("duration", IntegerArgumentType.integer(1, WorldGridDebugHistory.MAX_LIFETIME_TICKS))
+                    .executes(context -> startOutcomes(
+                        context,
+                        IntegerArgumentType.getInteger(context, "duration")
+                    ))
+                    .then(literal("ticks").executes(context -> startOutcomes(
+                        context,
+                        IntegerArgumentType.getInteger(context, "duration")
+                    )))
+                    .then(literal("seconds").executes(WorldGridDebugClient::startOutcomesSeconds))))
+            .then(literal("off").executes(WorldGridDebugClient::stopOutcomes))
+            .then(literal("clear").executes(WorldGridDebugClient::clearOutcomes))
+            .then(literal("legend").executes(WorldGridDebugClient::outcomeLegend));
     }
 
     private static int setTargets(CommandContext<CommandSourceStack> context, boolean enabled) {
@@ -219,10 +265,45 @@ public final class WorldGridDebugClient {
         return success(context, historyName(points) + " cleared");
     }
 
+    private static int startOutcomesSeconds(CommandContext<CommandSourceStack> context) {
+        int seconds = IntegerArgumentType.getInteger(context, "duration");
+        if (seconds > WorldGridDebugHistory.MAX_LIFETIME_TICKS / 20) {
+            context.getSource().sendFailure(Component.literal(
+                "Maximum history duration is " + (WorldGridDebugHistory.MAX_LIFETIME_TICKS / 20) + " seconds"
+            ));
+            return 0;
+        }
+        return startOutcomes(context, seconds * 20);
+    }
+
+    private static int startOutcomes(CommandContext<CommandSourceStack> context, int lifetimeTicks) {
+        HISTORY.startOutcomes(lifetimeTicks);
+        sendOutcomeSubscription(true);
+        return success(context, "Server placement outcomes enabled for " + duration(lifetimeTicks));
+    }
+
+    private static int stopOutcomes(CommandContext<CommandSourceStack> context) {
+        HISTORY.stopOutcomes();
+        sendOutcomeSubscription(false);
+        return success(context, "Server placement outcomes disabled and cleared");
+    }
+
+    private static int clearOutcomes(CommandContext<CommandSourceStack> context) {
+        HISTORY.clearOutcomes();
+        return success(context, "Server placement outcomes cleared");
+    }
+
+    private static int outcomeLegend(CommandContext<CommandSourceStack> context) {
+        success(context, "green=placed, red=Create rejected, purple=chunk unloaded, gray=occupied");
+        return success(context, "orange=no block item, yellow=no power, magenta=redstone locked");
+    }
+
     private static int enableAll(CommandContext<CommandSourceStack> context) {
         HISTORY.setTargetsEnabled(true);
         HISTORY.startPointPath(HISTORY.pointLifetimeTicks());
         HISTORY.startBlockTrail(HISTORY.blockLifetimeTicks());
+        HISTORY.startOutcomes(HISTORY.outcomeLifetimeTicks());
+        sendOutcomeSubscription(true);
         return success(context, "All deployer debug overlays enabled");
     }
 
@@ -230,6 +311,8 @@ public final class WorldGridDebugClient {
         HISTORY.setTargetsEnabled(false);
         HISTORY.stopPointPath();
         HISTORY.stopBlockTrail();
+        HISTORY.stopOutcomes();
+        sendOutcomeSubscription(false);
         return success(context, "All deployer debug overlays disabled and cleared");
     }
 
@@ -241,7 +324,8 @@ public final class WorldGridDebugClient {
     private static int status(CommandContext<CommandSourceStack> context) {
         return success(context, "targets=" + onOff(HISTORY.targetsEnabled())
             + ", point_path=" + onOff(HISTORY.pointPathEnabled()) + " (" + duration(HISTORY.pointLifetimeTicks()) + ")"
-            + ", block_trail=" + onOff(HISTORY.blockTrailEnabled()) + " (" + duration(HISTORY.blockLifetimeTicks()) + ")");
+            + ", block_trail=" + onOff(HISTORY.blockTrailEnabled()) + " (" + duration(HISTORY.blockLifetimeTicks()) + ")"
+            + ", outcomes=" + onOff(HISTORY.outcomesEnabled()) + " (" + duration(HISTORY.outcomeLifetimeTicks()) + ")");
     }
 
     private static int success(CommandContext<CommandSourceStack> context, String message) {
@@ -263,6 +347,12 @@ public final class WorldGridDebugClient {
 
     private static String duration(int ticks) {
         return ticks + " ticks / " + (ticks / 20.0) + " seconds";
+    }
+
+    private static void sendOutcomeSubscription(boolean enabled) {
+        if (Minecraft.getInstance().getConnection() != null) {
+            PacketDistributor.sendToServer(new DebugSubscriptionPayload(enabled));
+        }
     }
 
     private static void renderLiveTargets(PoseStack poseStack, VertexConsumer lines, VertexConsumer fill) {
@@ -331,6 +421,43 @@ public final class WorldGridDebugClient {
             AABB box = new AABB(block.position()).inflate(0.012);
             LevelRenderer.renderLineBox(poseStack, lines, box, 0.25f, 0.55f, 1.0f, alpha);
         }
+    }
+
+    private static void renderOutcomes(PoseStack poseStack, VertexConsumer lines, VertexConsumer fill) {
+        long now = HISTORY.tick();
+        int lifetime = HISTORY.outcomeLifetimeTicks();
+        for (TimedOutcome timed : HISTORY.outcomes()) {
+            float[] color = outcomeColor(timed.outcome());
+            float alpha = fade(now, timed.createdTick(), lifetime, 0.12f, 0.90f);
+            AABB box = new AABB(timed.position()).inflate(0.022);
+            LevelRenderer.addChainedFilledBoxVertices(
+                poseStack,
+                fill,
+                box.minX,
+                box.minY,
+                box.minZ,
+                box.maxX,
+                box.maxY,
+                box.maxZ,
+                color[0],
+                color[1],
+                color[2],
+                alpha * 0.18f
+            );
+            LevelRenderer.renderLineBox(poseStack, lines, box, color[0], color[1], color[2], alpha);
+        }
+    }
+
+    private static float[] outcomeColor(WorldGridPlacementOutcome outcome) {
+        return switch (outcome) {
+            case PLACED -> OUTCOME_PLACED;
+            case CREATE_REJECTED -> OUTCOME_REJECTED;
+            case CHUNK_UNLOADED -> OUTCOME_UNLOADED;
+            case TARGET_OCCUPIED -> OUTCOME_OCCUPIED;
+            case NO_BLOCK_ITEM -> OUTCOME_NO_ITEM;
+            case NO_POWER -> OUTCOME_NO_POWER;
+            case REDSTONE_LOCKED -> OUTCOME_REDSTONE;
+        };
     }
 
     private static float fade(long now, long created, int lifetime, float minimum, float maximum) {
