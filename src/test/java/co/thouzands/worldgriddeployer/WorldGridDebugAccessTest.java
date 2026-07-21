@@ -5,7 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Set;
+import java.util.List;
 import java.util.UUID;
+import com.mojang.authlib.GameProfile;
 import net.minecraft.nbt.CompoundTag;
 import org.junit.jupiter.api.Test;
 
@@ -62,6 +64,23 @@ final class WorldGridDebugAccessTest {
     }
 
     @Test
+    void roundTripsAndResolvesPendingNamesCaseInsensitively() {
+        WorldGridDebugAccess access = new WorldGridDebugAccess();
+        UUID resolved = UUID.randomUUID();
+        access.allowPending("FuturePlayer");
+        access.allowPending("AnotherPlayer");
+
+        CompoundTag saved = access.save(new CompoundTag(), null);
+        WorldGridDebugAccess loaded = WorldGridDebugAccess.load(saved, null);
+
+        assertEquals(List.of("AnotherPlayer", "FuturePlayer"), loaded.pendingPlayers().stream().sorted().toList());
+        assertTrue(loaded.resolvePending(new GameProfile(resolved, "futureplayer")));
+        assertEquals(Set.of(resolved), loaded.allowedPlayers());
+        assertEquals(List.of("AnotherPlayer"), loaded.pendingPlayers());
+        assertFalse(loaded.resolvePending(new GameProfile(UUID.randomUUID(), "NobodyElse")));
+    }
+
+    @Test
     void unknownSavedPolicyFallsBackToOperatorsOnly() {
         CompoundTag saved = new CompoundTag();
         saved.putString("Policy", "future-policy");
@@ -79,12 +98,21 @@ final class WorldGridDebugAccessTest {
         access.allow(original);
         long before = access.revision();
 
-        assertTrue(access.replaceSettings(WorldGridDebugAccess.Policy.WHITELIST, Set.of(replacement)));
+        assertTrue(access.replaceSettings(
+            WorldGridDebugAccess.Policy.WHITELIST,
+            Set.of(replacement),
+            List.of("FuturePlayer")
+        ));
 
         assertEquals(before + 1, access.revision());
         assertEquals(WorldGridDebugAccess.Policy.WHITELIST, access.policy());
         assertEquals(Set.of(replacement), access.allowedPlayers());
-        assertFalse(access.replaceSettings(WorldGridDebugAccess.Policy.WHITELIST, Set.of(replacement)));
+        assertEquals(List.of("FuturePlayer"), access.pendingPlayers());
+        assertFalse(access.replaceSettings(
+            WorldGridDebugAccess.Policy.WHITELIST,
+            Set.of(replacement),
+            List.of("futureplayer")
+        ));
         assertEquals(before + 1, access.revision());
     }
 }

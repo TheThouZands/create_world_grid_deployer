@@ -4,8 +4,11 @@ import com.mojang.authlib.GameProfile;
 import com.mojang.brigadier.context.CommandContext;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -18,15 +21,18 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtUtils;
+import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.GameProfileCache;
+import net.minecraft.util.StringUtil;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 
 /**
  * Persistent server policy for the authoritative placement-outcome stream.
@@ -39,6 +45,7 @@ public final class WorldGridDebugAccess extends SavedData {
     private static final String DATA_NAME = "worldgriddeployer_debug_access";
     private static final String POLICY_KEY = "Policy";
     private static final String ALLOWED_PLAYERS_KEY = "AllowedPlayers";
+    private static final String PENDING_PLAYERS_KEY = "PendingPlayers";
     private static final Factory<WorldGridDebugAccess> FACTORY = new Factory<>(
         WorldGridDebugAccess::new,
         WorldGridDebugAccess::load
@@ -46,6 +53,7 @@ public final class WorldGridDebugAccess extends SavedData {
 
     private Policy policy = Policy.OPS_ONLY;
     private final Set<UUID> allowedPlayers = new LinkedHashSet<>();
+    private final Map<String, String> pendingPlayers = new LinkedHashMap<>();
     private long revision;
 
     public WorldGridDebugAccess() {}
@@ -61,7 +69,9 @@ public final class WorldGridDebugAccess extends SavedData {
         }
 
         boolean operator = server.getPlayerList().isOp(player.getGameProfile());
-        return get(server).allows(player.getUUID(), operator);
+        WorldGridDebugAccess access = get(server);
+        access.resolvePending(player.getGameProfile());
+        return access.allows(player.getUUID(), operator);
     }
 
     public static Policy policy(MinecraftServer server) {
@@ -74,6 +84,10 @@ public final class WorldGridDebugAccess extends SavedData {
 
     public Set<UUID> allowedPlayers() {
         return Set.copyOf(this.allowedPlayers);
+    }
+
+    public List<String> pendingPlayers() {
+        return List.copyOf(this.pendingPlayers.values());
     }
 
     /**
@@ -119,10 +133,42 @@ public final class WorldGridDebugAccess extends SavedData {
         return changed;
     }
 
+    public boolean allowPending(String playerName) {
+        String checked = checkedPlayerName(playerName);
+        boolean changed = this.pendingPlayers.putIfAbsent(normalizeName(checked), checked) == null;
+        if (changed) {
+            this.changed();
+        }
+        return changed;
+    }
+
+    public boolean revokePending(String playerName) {
+        boolean changed = this.pendingPlayers.remove(normalizeName(playerName)) != null;
+        if (changed) {
+            this.changed();
+        }
+        return changed;
+    }
+
+    /** Converts a pending name into the authenticated identity seen at login. */
+    public boolean resolvePending(GameProfile profile) {
+        if (profile.getId() == null || profile.getName() == null) {
+            return false;
+        }
+        String pending = this.pendingPlayers.remove(normalizeName(profile.getName()));
+        if (pending == null) {
+            return false;
+        }
+        this.allowedPlayers.add(profile.getId());
+        this.changed();
+        return true;
+    }
+
     public int clearWhitelist() {
-        int removed = this.allowedPlayers.size();
+        int removed = this.allowedPlayers.size() + this.pendingPlayers.size();
         if (removed > 0) {
             this.allowedPlayers.clear();
+            this.pendingPlayers.clear();
             this.changed();
         }
         return removed;
@@ -130,15 +176,34 @@ public final class WorldGridDebugAccess extends SavedData {
 
     /** Applies a GUI edit as one logical mutation and one revision change. */
     public boolean replaceSettings(Policy policy, Collection<UUID> allowedPlayers) {
+        return this.replaceSettings(policy, allowedPlayers, List.of());
+    }
+
+    /** Applies resolved identities and unresolved invitations as one logical mutation. */
+    public boolean replaceSettings(
+        Policy policy,
+        Collection<UUID> allowedPlayers,
+        Collection<String> pendingPlayers
+    ) {
         Objects.requireNonNull(policy, "policy");
         LinkedHashSet<UUID> replacement = new LinkedHashSet<>(allowedPlayers);
-        if (this.policy == policy && this.allowedPlayers.equals(replacement)) {
+        LinkedHashMap<String, String> pendingReplacement = new LinkedHashMap<>();
+        for (String playerName : pendingPlayers) {
+            String checked = checkedPlayerName(playerName);
+            String normalized = normalizeName(checked);
+            pendingReplacement.putIfAbsent(normalized, this.pendingPlayers.getOrDefault(normalized, checked));
+        }
+        if (this.policy == policy
+            && this.allowedPlayers.equals(replacement)
+            && this.pendingPlayers.equals(pendingReplacement)) {
             return false;
         }
 
         this.policy = policy;
         this.allowedPlayers.clear();
         this.allowedPlayers.addAll(replacement);
+        this.pendingPlayers.clear();
+        this.pendingPlayers.putAll(pendingReplacement);
         this.changed();
         return true;
     }
@@ -157,6 +222,12 @@ public final class WorldGridDebugAccess extends SavedData {
             .map(NbtUtils::createUUID)
             .forEach(players::add);
         tag.put(ALLOWED_PLAYERS_KEY, players);
+        ListTag pending = new ListTag();
+        this.pendingPlayers.values().stream()
+            .sorted(String.CASE_INSENSITIVE_ORDER)
+            .map(StringTag::valueOf)
+            .forEach(pending::add);
+        tag.put(PENDING_PLAYERS_KEY, pending);
         return tag;
     }
 
@@ -172,7 +243,23 @@ public final class WorldGridDebugAccess extends SavedData {
                 CreateWorldGridDeployer.LOGGER.warn("Ignoring malformed world-grid debug whitelist UUID", exception);
             }
         }
+        ListTag pending = tag.getList(PENDING_PLAYERS_KEY, Tag.TAG_STRING);
+        for (Tag player : pending) {
+            try {
+                String name = checkedPlayerName(player.getAsString());
+                access.pendingPlayers.putIfAbsent(normalizeName(name), name);
+            } catch (IllegalArgumentException exception) {
+                CreateWorldGridDeployer.LOGGER.warn("Ignoring malformed pending world-grid debug username", exception);
+            }
+        }
         return access;
+    }
+
+    @SubscribeEvent
+    public static void playerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player && player.getServer() != null) {
+            get(player.getServer()).resolvePending(player.getGameProfile());
+        }
     }
 
     @SubscribeEvent
@@ -202,11 +289,12 @@ public final class WorldGridDebugAccess extends SavedData {
         context.getSource().sendSuccess(
             () -> Component.literal(
                 "World-grid outcome debugging: " + access.policy().serializedName()
-                    + " (" + access.policy().description() + "); whitelist entries=" + access.allowedPlayers.size()
+                    + " (" + access.policy().description() + "); resolved entries=" + access.allowedPlayers.size()
+                    + ", pending names=" + access.pendingPlayers.size()
             ),
             false
         );
-        return access.allowedPlayers.size();
+        return access.allowedPlayers.size() + access.pendingPlayers.size();
     }
 
     private static int setPolicy(CommandContext<CommandSourceStack> context, Policy policy) {
@@ -266,12 +354,19 @@ public final class WorldGridDebugAccess extends SavedData {
             .sorted(Comparator.comparing(UUID::toString))
             .map(playerId -> profileName(server, playerId) + " (" + playerId + ")")
             .collect(Collectors.joining(", "));
+        String pending = access.pendingPlayers.values().stream()
+            .sorted(String.CASE_INSENSITIVE_ORDER)
+            .map(name -> name + " (pending first join)")
+            .collect(Collectors.joining(", "));
+        if (!pending.isEmpty()) {
+            list = list.isEmpty() ? pending : list + ", " + pending;
+        }
         if (list.isEmpty()) {
             list = "<empty>";
         }
         String result = list;
         context.getSource().sendSuccess(() -> Component.literal("World-grid debug whitelist: " + result), false);
-        return access.allowedPlayers.size();
+        return access.allowedPlayers.size() + access.pendingPlayers.size();
     }
 
     private static int clearPlayers(CommandContext<CommandSourceStack> context) {
@@ -294,6 +389,18 @@ public final class WorldGridDebugAccess extends SavedData {
             return cache.get(playerId).map(GameProfile::getName).orElse("unknown");
         }
         return "unknown";
+    }
+
+    private static String checkedPlayerName(String playerName) {
+        String checked = Objects.requireNonNull(playerName, "playerName").trim();
+        if (checked.isEmpty() || !StringUtil.isValidPlayerName(checked)) {
+            throw new IllegalArgumentException("Invalid player name: " + checked);
+        }
+        return checked;
+    }
+
+    private static String normalizeName(String playerName) {
+        return playerName.trim().toLowerCase(Locale.ROOT);
     }
 
     public enum Policy {
