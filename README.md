@@ -86,6 +86,13 @@ The traversal is tied to crossed world cells, not RPM magnitude. Any non-zero
 RPM arms it, but increasing RPM does not make it place several times in the same
 cell or alter the sampling cadence.
 
+On compatible clients, the pole and hand use the same spatial rhythm as a
+deployer on an ordinary Create moving contraption: they retract at world-cell
+boundaries and extend toward cell centers. The animation is evaluated from
+Sable's render-interpolated pose every frame, so translation and rotation remain
+smooth and its pulse rate follows world-grid motion rather than RPM. This is a
+cosmetic client prediction only; it neither triggers nor delays placement.
+
 Each candidate is checked immediately before Create is called:
 
 - Its parent-world chunk must already be loaded.
@@ -324,8 +331,9 @@ The patch is deliberately narrow:
 - `DeployerBlockEntityMixin` adds the third-mode flag, NBT synchronization,
   Sable tick integration, grid traversal, and the call into Create's existing
   deployer handler.
-- `DeployerBlockEntityClientMixin` samples transformed deployer targets only for
-  local visual debugging.
+- `DeployerBlockEntityClientMixin` supplies render-interpolated hand motion and
+  samples transformed deployer targets for local visual debugging, while
+  `DeployerVisualMixin` applies that motion to Flywheel's embedded visual.
 - `FaceConnectedVoxelTraversal` is a pure grid-walk helper shared by placement
   and predicted debug trails.
 - `WorldGridDeployerSubLevelState` owns only the per-sublevel mode extension.

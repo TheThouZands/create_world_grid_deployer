@@ -6,7 +6,10 @@ import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import com.simibubi.create.content.kinetics.deployer.DeployerBlockEntity;
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.sublevel.ClientSubLevel;
+import co.thouzands.worldgriddeployer.WorldGridDeployerAccess;
 import co.thouzands.worldgriddeployer.WorldGridDebugHistory.DeployerKey;
+import co.thouzands.worldgriddeployer.client.WorldGridDeployerAnimation;
+import co.thouzands.worldgriddeployer.client.WorldGridDeployerAnimationAccess;
 import co.thouzands.worldgriddeployer.client.WorldGridDebugClient;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
@@ -20,13 +23,47 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(DeployerBlockEntity.class)
-public abstract class DeployerBlockEntityClientMixin extends KineticBlockEntity {
+public abstract class DeployerBlockEntityClientMixin extends KineticBlockEntity
+    implements WorldGridDeployerAnimationAccess {
     private static final double TARGET_BIAS = 1.0e-6;
 
     protected DeployerBlockEntityClientMixin(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
+    }
+
+    @Override
+    public float worldgriddeployer$getHandExtension(float partialTicks) {
+        if (this.getLevel() == null
+            || !this.getLevel().isClientSide
+            || !((WorldGridDeployerAccess) this).worldgriddeployer$isEnabled()) {
+            return Float.NaN;
+        }
+
+        BlockEntity blockEntity = (BlockEntity) (Object) this;
+        ClientSubLevel subLevel = Sable.HELPER.getContainingClient(blockEntity);
+        if (subLevel == null) {
+            return Float.NaN;
+        }
+
+        Direction facing = this.getBlockState().getValue(FACING);
+        Vec3 localTarget = Vec3.atCenterOf(this.worldPosition)
+            .add(Vec3.atLowerCornerOf(facing.getNormal()).scale(2.0));
+        Vec3 target = transformForRender(subLevel, localTarget, partialTicks);
+        return WorldGridDeployerAnimation.handExtension(target.x, target.y, target.z);
+    }
+
+    @Inject(method = "getHandOffset", at = @At("HEAD"), cancellable = true)
+    private void worldgriddeployer$animateFallbackRenderer(
+        float partialTicks,
+        CallbackInfoReturnable<Float> cir
+    ) {
+        float distance = this.worldgriddeployer$getHandExtension(partialTicks);
+        if (Float.isFinite(distance)) {
+            cir.setReturnValue(distance);
+        }
     }
 
     @Inject(method = "tick", at = @At("HEAD"))
@@ -66,6 +103,12 @@ public abstract class DeployerBlockEntityClientMixin extends KineticBlockEntity 
     private static Vec3 transform(ClientSubLevel subLevel, Vec3 local) {
         Vector3d transformed = new Vector3d(local.x, local.y, local.z);
         subLevel.logicalPose().transformPosition(transformed);
+        return new Vec3(transformed.x, transformed.y, transformed.z);
+    }
+
+    private static Vec3 transformForRender(ClientSubLevel subLevel, Vec3 local, float partialTicks) {
+        Vector3d transformed = new Vector3d(local.x, local.y, local.z);
+        subLevel.renderPose(partialTicks).transformPosition(transformed);
         return new Vec3(transformed.x, transformed.y, transformed.z);
     }
 }

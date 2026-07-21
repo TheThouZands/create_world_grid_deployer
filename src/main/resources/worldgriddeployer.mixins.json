@@ -8,7 +8,8 @@
   ],
   "client": [
     "ConfigModListEntryMixin",
-    "DeployerBlockEntityClientMixin"
+    "DeployerBlockEntityClientMixin",
+    "DeployerVisualMixin"
   ],
   "injectors": {
     "defaultRequire": 1
