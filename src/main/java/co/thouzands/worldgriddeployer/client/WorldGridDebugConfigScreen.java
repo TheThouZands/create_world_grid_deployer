@@ -37,25 +37,25 @@ final class WorldGridDebugConfigScreen extends WorldGridConfigScreenBase {
         int top = this.height / 2 - 111;
         this.addTitle(top, Component.translatable("worldgriddeployer.config.debug.title"));
 
-        this.addToggleRow(center, top + 38, "targets", this.targets, () -> {
+        this.addToggleRow(center, top + 46, "targets", this.targets, () -> {
             this.targets = !this.targets;
             this.rebuildWidgets();
         });
-        this.addTimedRow(center, top + 68, "point_path", this.pointPath, this.pointLifetime, () -> {
+        this.addTimedRow(center, top + 76, "point_path", this.pointPath, this.pointLifetime, () -> {
             this.pointPath = !this.pointPath;
             this.rebuildWidgets();
         }, () -> {
             this.pointLifetime = nextLifetime(this.pointLifetime);
             this.rebuildWidgets();
         });
-        this.addTimedRow(center, top + 98, "block_trail", this.blockTrail, this.blockLifetime, () -> {
+        this.addTimedRow(center, top + 106, "block_trail", this.blockTrail, this.blockLifetime, () -> {
             this.blockTrail = !this.blockTrail;
             this.rebuildWidgets();
         }, () -> {
             this.blockLifetime = nextLifetime(this.blockLifetime);
             this.rebuildWidgets();
         });
-        this.addTimedRow(center, top + 128, "outcomes", this.outcomes, this.outcomeLifetime, () -> {
+        this.addTimedRow(center, top + 136, "outcomes", this.outcomes, this.outcomeLifetime, () -> {
             this.outcomes = !this.outcomes;
             this.rebuildWidgets();
         }, () -> {
@@ -64,7 +64,7 @@ final class WorldGridDebugConfigScreen extends WorldGridConfigScreenBase {
         });
 
         this.addButton(
-            center - 154, top + 166, 95, 20,
+            center - 154, top + 174, 95, 20,
             Component.translatable("worldgriddeployer.config.debug.all_on"),
             () -> {
                 this.targets = this.pointPath = this.blockTrail = this.outcomes = true;
@@ -75,7 +75,7 @@ final class WorldGridDebugConfigScreen extends WorldGridConfigScreenBase {
             tip("worldgriddeployer.config.debug.all_on.tooltip")
         );
         this.addButton(
-            center - 48, top + 166, 95, 20,
+            center - 48, top + 174, 95, 20,
             Component.translatable("worldgriddeployer.config.debug.all_off"),
             () -> {
                 this.targets = this.pointPath = this.blockTrail = this.outcomes = false;
@@ -86,7 +86,7 @@ final class WorldGridDebugConfigScreen extends WorldGridConfigScreenBase {
             tip("worldgriddeployer.config.debug.all_off.tooltip")
         );
         this.addButton(
-            center + 58, top + 166, 95, 20,
+            center + 58, top + 174, 95, 20,
             Component.translatable("worldgriddeployer.config.debug.clear"),
             WorldGridDebugClient::clearDebugData,
             true,
@@ -95,7 +95,7 @@ final class WorldGridDebugConfigScreen extends WorldGridConfigScreenBase {
         );
 
         this.addButton(
-            center - 104, top + 199, 95, 20,
+            center - 104, top + 207, 95, 20,
             Component.translatable("gui.cancel"),
             this::onClose,
             true,
@@ -103,7 +103,7 @@ final class WorldGridDebugConfigScreen extends WorldGridConfigScreenBase {
             tip("worldgriddeployer.config.cancel.tooltip")
         );
         this.addButton(
-            center + 9, top + 199, 95, 20,
+            center + 9, top + 207, 95, 20,
             Component.translatable("gui.done"),
             this::save,
             true,

@@ -53,7 +53,7 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
 
         boolean editable = this.snapshot != null && this.snapshot.editable();
         this.addButton(
-            center - 154, top + 48, 308, 22,
+            center - 154, top + 52, 308, 22,
             policyLabel(),
             () -> {
                 this.policy = nextPolicy(this.policy);
@@ -69,7 +69,7 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
         this.username = new EditBox(
             this.font,
             center - 154,
-            top + 78,
+            top + 82,
             232,
             20,
             Component.translatable("worldgriddeployer.config.access.username")
@@ -81,7 +81,7 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
         this.addRenderableWidget(this.username);
 
         this.addButton(
-            center + 86, top + 78, 68, 20,
+            center + 86, top + 82, 68, 20,
             Component.translatable("worldgriddeployer.config.access.add"),
             this::stageUsername,
             editable,
@@ -97,7 +97,7 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
         int to = Math.min(rows.size(), from + ROWS_PER_PAGE);
         for (int index = from; index < to; index++) {
             WhitelistRow row = rows.get(index);
-            int rowY = top + 104 + (index - from) * 23;
+            int rowY = top + 108 + (index - from) * 23;
             this.addButton(
                 center - 154, rowY, 308, 19,
                 row.label(),
