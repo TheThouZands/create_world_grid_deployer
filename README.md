@@ -1,7 +1,7 @@
 # Create World-Grid Deployer
 
 <p align="center">
-  <img src="src/main/resources/worldgriddeployer.png" alt="Create World-Grid Deployer logo" width="256">
+  <img src="docs/media/world-grid-deployer-logo.webp" alt="Create World-Grid Deployer logo" width="256">
 </p>
 
 A focused NeoForge 1.21.1 compatibility patch for Create 6.0.10 and Sable
