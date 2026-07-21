@@ -25,6 +25,30 @@ commands. Debug payloads are registered as optional; the debug channel itself
 does not force clients without the mod to participate. Authoritative outcome
 debugging is private by default and limited to server operators.
 
+### Client without this patch
+
+A client may omit the World-Grid Deployer jar as long as it still has Create,
+Sable, and every other client-required mod in the server's pack. This patch adds
+no blocks, items, or other synchronized registry content, and its debug payload
+channel is explicitly optional, so its absence alone does not reject the
+connection.
+
+Core placement remains fully server-authoritative: already configured
+World-Grid deployers continue placing into the parent world regardless of which
+nearby players have the client component. The normal deployer selector
+interaction still reaches the server-side `changeMode` cycle. However, an
+unmodded client only understands Create's original `PUNCH` and `USE` values.
+Because World-Grid Use is encoded as `USE` plus this patch's private boolean,
+that client displays it as ordinary Use and receives no explicit World-Grid
+goggle label.
+
+The unmodded client also has no `/worldgriddeployer` client commands, overlays,
+history, or authoritative outcome subscription. It never sends a debug request,
+so the server does not retain a subscriber UUID, collect outcomes for that
+player, or send that player debug packets. The server access commands remain
+available to its console and operators, but installing the client component is
+recommended for anyone configuring or diagnosing these deployers.
+
 ## Mode cycle
 
 Use a wrench on Create's normal deployer mode selector:
