@@ -108,7 +108,7 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
             this.whitelist.children().add(new WhitelistEntry(
                 row.label(),
                 () -> {
-                    row.remove();
+                    row.action().run();
                     this.rebuildPreservingInput();
                 },
                 editable,
@@ -550,5 +550,5 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
         REMOVING
     }
 
-    private record WhitelistRow(Component label, Component tooltip, RowState state, Runnable remove) {}
+    private record WhitelistRow(Component label, Component tooltip, RowState state, Runnable action) {}
 }
