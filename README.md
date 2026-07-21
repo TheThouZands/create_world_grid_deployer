@@ -218,6 +218,10 @@ subscription. Client viewing preferences are retained in memory, however, so
 the Debug Overlays page remains useful from the Mods screen without an active
 world. The next login starts empty histories and reapplies those preferences;
 no points, blocks, outcomes, or server authorization carry between connections.
+Before requesting outcomes, the client verifies that the remote endpoint
+negotiated this mod's optional channel. Joining a server without the patch is
+therefore harmless: predicted views remain available and no unknown payload is
+sent.
 The server's subscriber sets and pending outcome batches are cleared on player
 logout or server shutdown; only the per-world access policy above is deliberately
 persistent.

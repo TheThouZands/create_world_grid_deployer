@@ -42,6 +42,7 @@ import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
+import net.neoforged.neoforge.network.registration.NetworkRegistry;
 
 /** Client-only command, collection, and rendering entry point. */
 @EventBusSubscriber(modid = CreateWorldGridDeployer.MOD_ID, value = Dist.CLIENT)
@@ -150,6 +151,11 @@ public final class WorldGridDebugClient {
 
     public static void clearDebugData() {
         HISTORY.clearData();
+    }
+
+    public static boolean serverOutcomesSupported() {
+        var connection = Minecraft.getInstance().getConnection();
+        return connection != null && NetworkRegistry.hasChannel(connection, DebugSubscriptionPayload.TYPE.id());
     }
 
     private static void applyPointPath(boolean enabled, int lifetimeTicks) {
@@ -429,7 +435,7 @@ public final class WorldGridDebugClient {
     }
 
     private static void sendOutcomeSubscription(boolean enabled) {
-        if (Minecraft.getInstance().getConnection() != null) {
+        if (serverOutcomesSupported()) {
             PacketDistributor.sendToServer(new DebugSubscriptionPayload(enabled));
         }
     }

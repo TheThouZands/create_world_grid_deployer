@@ -33,7 +33,8 @@ public final class WorldGridConfigScreen extends WorldGridConfigScreenBase {
         boolean privateSingleplayer = inWorld
             && this.minecraft.getSingleplayerServer() != null
             && !this.minecraft.getSingleplayerServer().isPublished();
-        boolean accessAvailable = inWorld && !privateSingleplayer;
+        boolean accessSupported = inWorld && WorldGridSettingsClient.supported();
+        boolean accessAvailable = accessSupported && !privateSingleplayer;
         this.addButton(
             center - 110,
             top + 84,
@@ -45,9 +46,11 @@ public final class WorldGridConfigScreen extends WorldGridConfigScreenBase {
             tipTitle("worldgriddeployer.config.access"),
             tip(privateSingleplayer
                 ? "worldgriddeployer.config.access.private_singleplayer"
-                : inWorld
+                : accessSupported
                     ? "worldgriddeployer.config.access.tooltip"
-                    : "worldgriddeployer.config.world_required")
+                    : inWorld
+                        ? "worldgriddeployer.config.access.unsupported_server"
+                        : "worldgriddeployer.config.world_required")
         );
 
         this.addButton(

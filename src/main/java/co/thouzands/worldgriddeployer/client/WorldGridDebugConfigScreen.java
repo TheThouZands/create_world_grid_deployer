@@ -138,9 +138,7 @@ final class WorldGridDebugConfigScreen extends WorldGridConfigScreenBase {
             toggle,
             true,
             tipTitle("worldgriddeployer.config.debug." + key),
-            tip(key.equals("outcomes") && (this.minecraft == null || this.minecraft.level == null)
-                ? "worldgriddeployer.config.debug.outcomes.offline.tooltip"
-                : "worldgriddeployer.config.debug." + key + ".tooltip")
+            outcomeOrLocalTooltip(key)
         );
         this.addButton(
             center + 59, y, 95, 21,
@@ -164,6 +162,19 @@ final class WorldGridDebugConfigScreen extends WorldGridConfigScreenBase {
             this.outcomeLifetime
         ));
         this.onClose();
+    }
+
+    private Component outcomeOrLocalTooltip(String key) {
+        if (!key.equals("outcomes")) {
+            return tip("worldgriddeployer.config.debug." + key + ".tooltip");
+        }
+        if (this.minecraft == null || this.minecraft.level == null) {
+            return tip("worldgriddeployer.config.debug.outcomes.offline.tooltip");
+        }
+        if (!WorldGridDebugClient.serverOutcomesSupported()) {
+            return tip("worldgriddeployer.config.debug.outcomes.unsupported.tooltip");
+        }
+        return tip("worldgriddeployer.config.debug.outcomes.tooltip");
     }
 
     private static Component rowLabel(String key, boolean enabled) {
