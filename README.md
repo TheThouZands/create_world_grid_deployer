@@ -161,7 +161,7 @@ The outcome policy is persisted per world in
 | --- | --- |
 | `disabled` | Nobody, including operators. |
 | `ops` | Server operators only. This is the default. |
-| `whitelist` | Operators plus UUIDs on the debug whitelist. |
+| `whitelist` | Operators plus resolved UUIDs and pending usernames on the debug whitelist. |
 | `public` | Every compatible client. |
 
 Policy and whitelist commands require command permission level 3:
@@ -176,12 +176,15 @@ it but every mutating control is locked; permission is checked again when Apply 
 reaches the server.
 
 GUI changes remain local until **Apply Changes** sends the selected policy,
-retained UUIDs, and newly typed usernames as one revision-checked edit. The server resolves all
-names first and changes nothing if any name is unknown, the screen is stale, or
-permission has changed. Successful policy and whitelist changes are then
-persisted together. Online and already-listed names support Tab completion;
-previously seen offline names can be entered in full and are resolved through
-the server profile cache.
+retained UUIDs, retained pending names, and newly typed usernames as one
+revision-checked edit. Typing pauses briefly before an asynchronous server-backed
+lookup reports whether the account exists; known server names also support Tab
+completion. A verified account is stored by UUID. An unknown name is not allowed
+to invalidate the batch: it is persisted as a case-insensitive pending invitation
+and converted to the authenticated UUID when that exact player later joins.
+Offline-mode servers cannot verify remote accounts, so an offline player is kept
+pending until their first matching login. Stale screens, invalid username syntax,
+and insufficient permission still reject the entire edit atomically.
 
 In private single-player the server-access page is hidden because there are no
 remote players to authorize. Once the integrated server is published to LAN,
@@ -204,8 +207,9 @@ command policy.
 
 `allow` and `revoke` use Minecraft's game-profile argument. They accept typed
 usernames or player selectors, autocomplete online usernames, and can resolve a
-previously seen offline username from the server profile cache. Entries are
-stored as UUIDs, so a later username change does not change access.
+previously seen offline username from the server profile cache. Resolved entries
+are stored as UUIDs, so a later username change does not change access. The GUI
+additionally supports pending names that the profile argument cannot yet resolve.
 
 A denied outcome request is retained only as an in-memory UUID while that player
 remains connected. Requested and authorized subscribers are separate sets;

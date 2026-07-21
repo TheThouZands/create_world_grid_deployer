@@ -3,6 +3,8 @@ package co.thouzands.worldgriddeployer.client;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import co.thouzands.worldgriddeployer.WorldGridDebugAccess;
+import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.NameLookupResultPayload;
+import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.NameLookupStatus;
 import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.PlayerEntry;
 import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.SettingsSnapshotPayload;
 import java.util.ArrayList;
@@ -27,6 +29,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.util.StringUtil;
 import org.lwjgl.glfw.GLFW;
 
 final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
@@ -37,13 +40,19 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
     @Nullable
     private WhitelistList whitelist;
     private final Map<UUID, PlayerEntry> retained = new LinkedHashMap<>();
+    private final Map<String, String> retainedPending = new LinkedHashMap<>();
     private final List<String> pendingAdds = new ArrayList<>();
     private final Set<UUID> pendingRemovals = new HashSet<>();
+    private final Set<String> pendingNameRemovals = new HashSet<>();
     private WorldGridDebugAccess.Policy policy = WorldGridDebugAccess.Policy.OPS_ONLY;
     private long receivedGeneration = -1L;
     private boolean requested;
     private double whitelistScroll;
     private String inputValue = "";
+    private String nameLookupQuery = "";
+    private int nameLookupDelay = -1;
+    private long receivedNameLookupGeneration = -1L;
+    private Component nameLookupStatus = lookupMessage("prompt", ChatFormatting.DARK_GRAY);
     private Component status = Component.translatable("worldgriddeployer.config.access.loading");
 
     WorldGridServerAccessScreen(@Nullable Screen parent) {
@@ -86,7 +95,7 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
             Component.translatable("worldgriddeployer.config.access.username"),
             Component.translatable("worldgriddeployer.config.access.username.hint")
         );
-        this.username.setMaxLength(64);
+        this.username.setMaxLength(16);
         this.username.setValue(this.inputValue);
         this.username.setEditable(editable);
         this.addRenderableWidget(this.username);
@@ -102,7 +111,7 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
         );
 
         List<WhitelistRow> rows = rows();
-        this.whitelist = new WhitelistList(this.minecraft, 320, 88, top + 106, 23);
+        this.whitelist = new WhitelistList(this.minecraft, 320, 75, top + 119, 23);
         this.whitelist.setX(center - 160);
         for (WhitelistRow row : rows) {
             this.whitelist.children().add(new WhitelistEntry(
@@ -114,15 +123,17 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
                 editable,
                 tipTitle(switch (row.state()) {
                     case ADDING -> "worldgriddeployer.config.access.pending";
-                    case REMOVING -> "worldgriddeployer.config.access.removing";
+                    case REMOVING, PENDING_REMOVING -> "worldgriddeployer.config.access.removing";
                     case CURRENT -> "worldgriddeployer.config.access.whitelisted";
+                    case PENDING -> "worldgriddeployer.config.access.awaiting";
                 }),
                 row.tooltip(),
                 editable
                     ? tipAction(switch (row.state()) {
                         case ADDING -> "worldgriddeployer.config.access.undo_add.tooltip";
-                        case REMOVING -> "worldgriddeployer.config.access.keep.tooltip";
+                        case REMOVING, PENDING_REMOVING -> "worldgriddeployer.config.access.keep.tooltip";
                         case CURRENT -> "worldgriddeployer.config.access.remove.tooltip";
+                        case PENDING -> "worldgriddeployer.config.access.remove_pending.tooltip";
                     })
                     : lockedTip()
             ));
@@ -165,9 +176,27 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
     public void tick() {
         super.tick();
         if (this.username != null) {
-            this.inputValue = this.username.getValue();
+            String currentInput = this.username.getValue();
+            if (!currentInput.equals(this.inputValue)) {
+                this.inputValue = currentInput;
+                this.scheduleNameLookup(currentInput);
+            }
             String suggestion = matchingSuggestion(this.inputValue);
             this.username.setSuggestion(suggestion == null ? null : suggestion.substring(this.inputValue.length()));
+        }
+
+        if (this.nameLookupDelay > 0 && --this.nameLookupDelay == 0) {
+            WorldGridSettingsClient.lookupName(this.nameLookupQuery);
+            this.nameLookupDelay = -1;
+        }
+
+        long lookupGeneration = WorldGridSettingsClient.nameLookupGeneration();
+        if (lookupGeneration != this.receivedNameLookupGeneration) {
+            this.receivedNameLookupGeneration = lookupGeneration;
+            NameLookupResultPayload lookup = WorldGridSettingsClient.nameLookup();
+            if (lookup != null && lookup.query().equalsIgnoreCase(this.nameLookupQuery)) {
+                this.applyNameLookup(lookup);
+            }
         }
 
         long generation = WorldGridSettingsClient.generation();
@@ -203,9 +232,13 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
         this.policy = WorldGridDebugAccess.Policy.byName(received.policy());
         this.retained.clear();
         received.whitelist().forEach(entry -> this.retained.put(entry.id(), entry));
+        this.retainedPending.clear();
+        received.pendingPlayers().forEach(name -> this.retainedPending.put(normalizeName(name), name));
         this.pendingAdds.clear();
         this.pendingRemovals.clear();
+        this.pendingNameRemovals.clear();
         this.inputValue = "";
+        this.resetNameLookup();
         this.whitelistScroll = 0;
         this.status = resultMessage(received);
     }
@@ -215,12 +248,14 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
             return;
         }
         String name = this.username.getValue().trim();
-        if (name.isEmpty()) {
+        if (name.isEmpty() || !StringUtil.isValidPlayerName(name)) {
             this.status = Component.translatable("worldgriddeployer.config.access.result.empty_name")
                 .withStyle(ChatFormatting.RED);
+            this.nameLookupStatus = lookupMessage("invalid", ChatFormatting.RED);
             return;
         }
         boolean duplicate = this.retained.values().stream().anyMatch(entry -> entry.name().equalsIgnoreCase(name))
+            || this.retainedPending.containsKey(normalizeName(name))
             || this.pendingAdds.stream().anyMatch(entry -> entry.equalsIgnoreCase(name));
         if (duplicate) {
             this.status = Component.translatable("worldgriddeployer.config.access.result.duplicate", name)
@@ -230,6 +265,7 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
 
         this.pendingAdds.add(name);
         this.inputValue = "";
+        this.resetNameLookup();
         this.status = Component.translatable("worldgriddeployer.config.access.result.staged", name)
             .withStyle(ChatFormatting.GREEN);
         this.whitelistScroll = Double.MAX_VALUE;
@@ -247,6 +283,9 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
             this.policy.serializedName(),
             this.retained.keySet().stream()
                 .filter(id -> !this.pendingRemovals.contains(id))
+                .toList(),
+            this.retainedPending.values().stream()
+                .filter(name -> !this.pendingNameRemovals.contains(normalizeName(name)))
                 .toList(),
             List.copyOf(this.pendingAdds)
         );
@@ -268,6 +307,22 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
                     tipCurrent("worldgriddeployer.config.access.entry.tooltip", entry.id()),
                     removing ? RowState.REMOVING : RowState.CURRENT,
                     () -> this.toggleRemoval(entry)
+                ));
+            });
+        this.retainedPending.values().stream()
+            .sorted(String.CASE_INSENSITIVE_ORDER)
+            .forEach(name -> {
+                boolean removing = this.pendingNameRemovals.contains(normalizeName(name));
+                rows.add(new WhitelistRow(
+                    Component.translatable(
+                        removing
+                            ? "worldgriddeployer.config.access.entry.removing"
+                            : "worldgriddeployer.config.access.entry.awaiting",
+                        name
+                    ).withStyle(removing ? ChatFormatting.RED : ChatFormatting.YELLOW),
+                    tipCurrent("worldgriddeployer.config.access.entry.awaiting.tooltip", name),
+                    removing ? RowState.PENDING_REMOVING : RowState.PENDING,
+                    () -> this.togglePendingRemoval(name)
                 ));
             });
         this.pendingAdds.stream()
@@ -298,12 +353,25 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
             .withStyle(ChatFormatting.GRAY);
     }
 
+    private void togglePendingRemoval(String name) {
+        String normalized = normalizeName(name);
+        if (this.pendingNameRemovals.remove(normalized)) {
+            this.status = Component.translatable("worldgriddeployer.config.access.result.kept", name)
+                .withStyle(ChatFormatting.GREEN);
+        } else {
+            this.pendingNameRemovals.add(normalized);
+            this.status = Component.translatable("worldgriddeployer.config.access.result.removing", name)
+                .withStyle(ChatFormatting.YELLOW);
+        }
+    }
+
     private boolean isDirty() {
         if (
             this.snapshot == null
                 || !this.snapshot.policy().equals(this.policy.serializedName())
                 || !this.pendingAdds.isEmpty()
                 || !this.pendingRemovals.isEmpty()
+                || !this.pendingNameRemovals.isEmpty()
         ) {
             return true;
         }
@@ -321,6 +389,64 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
             .filter(name -> !name.equalsIgnoreCase(input))
             .findFirst()
             .orElse(null);
+    }
+
+    private void scheduleNameLookup(String input) {
+        String name = input.trim();
+        this.nameLookupQuery = name;
+        this.nameLookupDelay = -1;
+        if (name.isEmpty()) {
+            this.nameLookupStatus = lookupMessage("prompt", ChatFormatting.DARK_GRAY);
+            return;
+        }
+        if (!StringUtil.isValidPlayerName(name)) {
+            this.nameLookupStatus = lookupMessage("invalid", ChatFormatting.RED);
+            return;
+        }
+        if (this.retained.values().stream().anyMatch(entry -> entry.name().equalsIgnoreCase(name))
+            || this.retainedPending.containsKey(normalizeName(name))
+            || this.pendingAdds.stream().anyMatch(entry -> entry.equalsIgnoreCase(name))) {
+            this.nameLookupStatus = Component.translatable(
+                "worldgriddeployer.config.access.lookup.duplicate",
+                name
+            ).withStyle(ChatFormatting.YELLOW);
+            return;
+        }
+        this.nameLookupStatus = lookupMessage("checking", ChatFormatting.GRAY);
+        this.nameLookupDelay = 8;
+    }
+
+    private void applyNameLookup(NameLookupResultPayload lookup) {
+        NameLookupStatus lookupStatus = NameLookupStatus.byName(lookup.status());
+        this.nameLookupStatus = switch (lookupStatus) {
+            case FOUND -> Component.translatable(
+                "worldgriddeployer.config.access.lookup.found",
+                lookup.canonicalName()
+            ).withStyle(ChatFormatting.GREEN);
+            case PENDING -> Component.translatable(
+                "worldgriddeployer.config.access.lookup.pending",
+                lookup.canonicalName()
+            ).withStyle(ChatFormatting.YELLOW);
+            case NOT_FOUND -> lookupMessage("not_found", ChatFormatting.YELLOW);
+            case OFFLINE_MODE -> lookupMessage("offline_mode", ChatFormatting.YELLOW);
+            case INVALID -> lookupMessage("invalid", ChatFormatting.RED);
+            case NO_PERMISSION -> lookupMessage("no_permission", ChatFormatting.RED);
+            case ERROR -> lookupMessage("error", ChatFormatting.YELLOW);
+        };
+    }
+
+    private void resetNameLookup() {
+        this.nameLookupQuery = "";
+        this.nameLookupDelay = -1;
+        this.nameLookupStatus = lookupMessage("prompt", ChatFormatting.DARK_GRAY);
+    }
+
+    private static Component lookupMessage(String suffix, ChatFormatting color) {
+        return Component.translatable("worldgriddeployer.config.access.lookup." + suffix).withStyle(color);
+    }
+
+    private static String normalizeName(String name) {
+        return name.trim().toLowerCase(Locale.ROOT);
     }
 
     private void rebuildPreservingInput() {
@@ -381,13 +507,14 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
                 ? "worldgriddeployer.config.access.context.multiplayer_locked"
                 : "worldgriddeployer.config.access.context.multiplayer";
         graphics.drawCenteredString(this.font, Component.translatable(contextKey), this.width / 2, top + 33, 0xffe0d8c8);
+        graphics.drawCenteredString(this.font, this.nameLookupStatus, this.width / 2, top + 106, 0xffffffff);
 
         if (this.rows().isEmpty()) {
             graphics.drawCenteredString(
                 this.font,
                 Component.translatable("worldgriddeployer.config.access.empty"),
                 this.width / 2,
-                top + 144,
+                top + 154,
                 0xffb8b1a5
             );
         }
@@ -547,7 +674,9 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
     private enum RowState {
         CURRENT,
         ADDING,
-        REMOVING
+        REMOVING,
+        PENDING,
+        PENDING_REMOVING
     }
 
     private record WhitelistRow(Component label, Component tooltip, RowState state, Runnable action) {}
