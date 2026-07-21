@@ -9,9 +9,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
+import net.minecraft.ChatFormatting;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
@@ -37,7 +39,8 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 public final class WorldGridDebugNetworking {
     private static final int MAX_OUTCOMES_PER_DIMENSION_TICK = 4096;
     private static final int MAX_OUTCOMES_PER_PACKET = 4096;
-    private static final Set<UUID> SUBSCRIBERS = new HashSet<>();
+    private static final Set<UUID> REQUESTED_SUBSCRIBERS = new HashSet<>();
+    private static final Set<UUID> ACTIVE_SUBSCRIBERS = new HashSet<>();
     private static final Map<ResourceKey<Level>, List<OutcomeEntry>> PENDING = new HashMap<>();
 
     private WorldGridDebugNetworking() {}
@@ -55,11 +58,12 @@ public final class WorldGridDebugNetworking {
 
     @SubscribeEvent
     public static void flush(ServerTickEvent.Post event) {
+        MinecraftServer server = event.getServer();
+        refreshAuthorization(server);
         if (PENDING.isEmpty()) {
             return;
         }
 
-        MinecraftServer server = event.getServer();
         for (Map.Entry<ResourceKey<Level>, List<OutcomeEntry>> pending : PENDING.entrySet()) {
             ServerLevel level = server.getLevel(pending.getKey());
             if (level == null || pending.getValue().isEmpty()) {
@@ -68,7 +72,7 @@ public final class WorldGridDebugNetworking {
 
             OutcomeBatchPayload payload = new OutcomeBatchPayload(pending.getValue());
             for (ServerPlayer player : level.players()) {
-                if (SUBSCRIBERS.contains(player.getUUID())) {
+                if (ACTIVE_SUBSCRIBERS.contains(player.getUUID())) {
                     PacketDistributor.sendToPlayer(player, payload);
                 }
             }
@@ -78,12 +82,14 @@ public final class WorldGridDebugNetworking {
 
     @SubscribeEvent
     public static void loggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
-        SUBSCRIBERS.remove(event.getEntity().getUUID());
+        REQUESTED_SUBSCRIBERS.remove(event.getEntity().getUUID());
+        ACTIVE_SUBSCRIBERS.remove(event.getEntity().getUUID());
     }
 
     @SubscribeEvent
     public static void serverStopped(ServerStoppedEvent event) {
-        SUBSCRIBERS.clear();
+        REQUESTED_SUBSCRIBERS.clear();
+        ACTIVE_SUBSCRIBERS.clear();
         PENDING.clear();
     }
 
@@ -107,9 +113,38 @@ public final class WorldGridDebugNetworking {
             return;
         }
         if (payload.enabled()) {
-            SUBSCRIBERS.add(serverPlayer.getUUID());
+            boolean newlyRequested = REQUESTED_SUBSCRIBERS.add(serverPlayer.getUUID());
+            if (WorldGridDebugAccess.canUse(serverPlayer)) {
+                ACTIVE_SUBSCRIBERS.add(serverPlayer.getUUID());
+                if (newlyRequested) {
+                    serverPlayer.sendSystemMessage(
+                        Component.literal("World-grid server outcome debugging enabled")
+                            .withStyle(ChatFormatting.GREEN)
+                    );
+                }
+            } else {
+                ACTIVE_SUBSCRIBERS.remove(serverPlayer.getUUID());
+                if (newlyRequested) {
+                    serverPlayer.sendSystemMessage(
+                        Component.literal(
+                            "World-grid server outcome debugging is private; request retained pending access"
+                        ).withStyle(ChatFormatting.RED)
+                    );
+                }
+            }
         } else {
-            SUBSCRIBERS.remove(serverPlayer.getUUID());
+            REQUESTED_SUBSCRIBERS.remove(serverPlayer.getUUID());
+            ACTIVE_SUBSCRIBERS.remove(serverPlayer.getUUID());
+        }
+    }
+
+    private static void refreshAuthorization(MinecraftServer server) {
+        ACTIVE_SUBSCRIBERS.clear();
+        for (UUID playerId : REQUESTED_SUBSCRIBERS) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerId);
+            if (player != null && WorldGridDebugAccess.canUse(player)) {
+                ACTIVE_SUBSCRIBERS.add(playerId);
+            }
         }
     }
 
@@ -193,11 +228,11 @@ public final class WorldGridDebugNetworking {
     }
 
     private static boolean hasSubscriber(ServerLevel level) {
-        if (SUBSCRIBERS.isEmpty()) {
+        if (ACTIVE_SUBSCRIBERS.isEmpty()) {
             return false;
         }
         for (ServerPlayer player : level.players()) {
-            if (SUBSCRIBERS.contains(player.getUUID())) {
+            if (ACTIVE_SUBSCRIBERS.contains(player.getUUID())) {
                 return true;
             }
         }

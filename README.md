@@ -22,7 +22,8 @@ Install the built jar in the server's `mods` directory. Core placement is
 server-authoritative. Installing it on clients is strongly recommended because
 the client component supplies the World-Grid mode label and all visual debug
 commands. Debug payloads are registered as optional; the debug channel itself
-does not force clients without the mod to participate.
+does not force clients without the mod to participate. Authoritative outcome
+debugging is private by default and limited to server operators.
 
 ## Mode cycle
 
@@ -121,6 +122,51 @@ upgrading an existing world, the sublevel copy is seeded from the ordinary block
 entity value. Explicit false values are retained so an old true block-entity tag
 cannot revive a mode the player deliberately disabled.
 
+## Server debug access
+
+Only the authoritative `outcomes` stream contains server-only information, so
+only that stream is access-controlled. `targets`, `point_path`, and
+`block_trail` are calculated entirely from transforms already present on the
+client and cannot be meaningfully hidden by the server.
+
+The outcome policy is persisted per world in
+`data/worldgriddeployer_debug_access.dat`. Its default is `ops`.
+
+| Policy | Access |
+| --- | --- |
+| `disabled` | Nobody, including operators. |
+| `ops` | Server operators only. This is the default. |
+| `whitelist` | Operators plus UUIDs on the debug whitelist. |
+| `public` | Every compatible client. |
+
+Policy and whitelist commands require command permission level 3:
+
+```text
+/worldgriddeployer_access status
+/worldgriddeployer_access mode disabled
+/worldgriddeployer_access mode ops
+/worldgriddeployer_access mode whitelist
+/worldgriddeployer_access mode public
+
+/worldgriddeployer_access allow <username-or-selector>
+/worldgriddeployer_access revoke <username-or-selector>
+/worldgriddeployer_access list
+/worldgriddeployer_access clear
+```
+
+`allow` and `revoke` use Minecraft's game-profile argument. They accept typed
+usernames or player selectors, autocomplete online usernames, and can resolve a
+previously seen offline username from the server profile cache. Entries are
+stored as UUIDs, so a later username change does not change access.
+
+A denied outcome request is retained only as an in-memory UUID while that player
+remains connected. Requested and authorized subscribers are separate sets;
+authorization is rebuilt once per server tick. Consequently a newly whitelisted
+player starts receiving outcomes without toggling the client command again, but
+a denied request creates no outcome records, packets, blocked work, or
+per-candidate player scan. Explicit `outcomes off`, logout, and server shutdown
+discard the request.
+
 ## Visual debugging
 
 All commands are client commands and require this mod on that client. Overlays
@@ -166,8 +212,10 @@ predictions. They do not prove the server attempted a placement.
 
 ### Server-authoritative outcomes
 
-`outcomes` subscribes the client to the actual result recorded by the server for
-each evaluated target:
+`outcomes` requests access to the actual result recorded by the server for each
+evaluated target. The server sends a red denial message if the active policy
+does not currently authorize that player; the request remains pending as
+described above.
 
 | Color | Outcome | Meaning |
 | --- | --- | --- |
@@ -179,10 +227,11 @@ each evaluated target:
 | Yellow | `NO_POWER` | Kinetic speed was zero. |
 | Magenta | `REDSTONE_LOCKED` | The deployer was redstone locked. |
 
-The server records outcomes only when at least one subscribed player is in that
-dimension. Results are grouped into one batch per dimension per server tick,
-sent only to subscribers, and capped at 4,096 entries per dimension per tick.
-Disconnecting removes the subscription.
+The server records outcomes only when at least one requested **and authorized**
+player is in that dimension. Results are grouped into one batch per dimension
+per server tick, sent only to authorized subscribers, and capped at 4,096
+entries per dimension per tick. Authorization is checked again before every
+batch, so policy changes and whitelist removal take effect immediately.
 
 Practical interpretation:
 
@@ -206,8 +255,9 @@ The patch is deliberately narrow:
   and predicted debug trails.
 - `WorldGridDeployerSubLevelState` owns only the per-sublevel mode extension.
 - `WorldGridDebugNetworking`, `WorldGridDebugHistory`, and
-  `WorldGridDebugClient` implement opt-in diagnostics; they do not participate
-  in placement when debugging is disabled.
+  `WorldGridDebugClient` implement opt-in diagnostics, while
+  `WorldGridDebugAccess` persists and enforces the server privacy policy. They
+  do not participate in placement when debugging is disabled.
 
 It adds no blocks, items, recipes, dimensions, chunk tickets, general player
 capabilities, or global changes to Create contraptions. Ordinary deployers and
@@ -223,5 +273,5 @@ The build expects the exact Create and Sable jars in the sibling server's
 ```
 
 The unit suite covers face-connected traversal, per-tick traversal limits,
-debug-history expiry, authoritative outcome replacement/expiry, and network
-payload round trips.
+debug-history expiry, authoritative outcome replacement/expiry, debug access
+policy and persistence, and network payload round trips.
