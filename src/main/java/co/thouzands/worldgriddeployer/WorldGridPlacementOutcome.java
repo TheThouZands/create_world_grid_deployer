@@ -1,4 +1,4 @@
-package dev.thouzands.worldgriddeployer;
+package co.thouzands.worldgriddeployer;
 
 /** Final server-authoritative result for one world-grid placement candidate. */
 public enum WorldGridPlacementOutcome {

@@ -1,4 +1,4 @@
-package dev.thouzands.worldgriddeployer;
+package co.thouzands.worldgriddeployer;
 
 public interface WorldGridDeployerAccess {
     boolean worldgriddeployer$isEnabled();

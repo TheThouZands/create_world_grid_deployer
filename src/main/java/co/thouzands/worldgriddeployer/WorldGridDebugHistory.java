@@ -1,7 +1,7 @@
-package dev.thouzands.worldgriddeployer;
+package co.thouzands.worldgriddeployer;
 
-import dev.thouzands.worldgriddeployer.FaceConnectedVoxelTraversal.Step;
-import dev.thouzands.worldgriddeployer.WorldGridDebugNetworking.OutcomeEntry;
+import co.thouzands.worldgriddeployer.FaceConnectedVoxelTraversal.Step;
+import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.OutcomeEntry;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashMap;

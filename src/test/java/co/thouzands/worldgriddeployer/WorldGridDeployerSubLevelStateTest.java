@@ -1,4 +1,4 @@
-package dev.thouzands.worldgriddeployer;
+package co.thouzands.worldgriddeployer;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;

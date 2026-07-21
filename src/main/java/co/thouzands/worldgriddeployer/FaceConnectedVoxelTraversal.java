@@ -1,4 +1,4 @@
-package dev.thouzands.worldgriddeployer;
+package co.thouzands.worldgriddeployer;
 
 import java.util.ArrayList;
 import java.util.List;

@@ -1,6 +1,6 @@
-package dev.thouzands.worldgriddeployer;
+package co.thouzands.worldgriddeployer;
 
-import dev.thouzands.worldgriddeployer.client.WorldGridDebugClient;
+import co.thouzands.worldgriddeployer.client.WorldGridDebugClient;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;

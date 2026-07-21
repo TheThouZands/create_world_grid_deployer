@@ -1,12 +1,12 @@
-package dev.thouzands.worldgriddeployer;
+package co.thouzands.worldgriddeployer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import dev.thouzands.worldgriddeployer.WorldGridDebugHistory.DeployerKey;
-import dev.thouzands.worldgriddeployer.WorldGridDebugNetworking.OutcomeEntry;
+import co.thouzands.worldgriddeployer.WorldGridDebugHistory.DeployerKey;
+import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.OutcomeEntry;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;

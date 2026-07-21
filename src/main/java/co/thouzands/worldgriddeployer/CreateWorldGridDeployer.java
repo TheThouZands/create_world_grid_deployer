@@ -1,4 +1,4 @@
-package dev.thouzands.worldgriddeployer;
+package co.thouzands.worldgriddeployer;
 
 import com.mojang.logging.LogUtils;
 import net.neoforged.bus.api.IEventBus;

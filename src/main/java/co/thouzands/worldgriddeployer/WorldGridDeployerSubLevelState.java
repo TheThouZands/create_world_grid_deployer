@@ -1,4 +1,4 @@
-package dev.thouzands.worldgriddeployer;
+package co.thouzands.worldgriddeployer;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;

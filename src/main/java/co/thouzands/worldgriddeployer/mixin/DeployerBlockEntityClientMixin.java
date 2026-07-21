@@ -1,4 +1,4 @@
-package dev.thouzands.worldgriddeployer.mixin;
+package co.thouzands.worldgriddeployer.mixin;
 
 import static com.simibubi.create.content.kinetics.deployer.DeployerBlock.FACING;
 
@@ -6,8 +6,8 @@ import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import com.simibubi.create.content.kinetics.deployer.DeployerBlockEntity;
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.sublevel.ClientSubLevel;
-import dev.thouzands.worldgriddeployer.WorldGridDebugHistory.DeployerKey;
-import dev.thouzands.worldgriddeployer.client.WorldGridDebugClient;
+import co.thouzands.worldgriddeployer.WorldGridDebugHistory.DeployerKey;
+import co.thouzands.worldgriddeployer.client.WorldGridDebugClient;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;

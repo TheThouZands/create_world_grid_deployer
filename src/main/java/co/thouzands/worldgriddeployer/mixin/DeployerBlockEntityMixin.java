@@ -1,4 +1,4 @@
-package dev.thouzands.worldgriddeployer.mixin;
+package co.thouzands.worldgriddeployer.mixin;
 
 import static com.simibubi.create.content.kinetics.deployer.DeployerBlock.FACING;
 
@@ -10,12 +10,12 @@ import com.simibubi.create.content.kinetics.deployer.DeployerFakePlayer;
 import com.simibubi.create.content.kinetics.deployer.DeployerHandler;
 import dev.ryanhcode.sable.api.block.BlockEntitySubLevelActor;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
-import dev.thouzands.worldgriddeployer.FaceConnectedVoxelTraversal;
-import dev.thouzands.worldgriddeployer.FaceConnectedVoxelTraversal.Step;
-import dev.thouzands.worldgriddeployer.WorldGridDeployerAccess;
-import dev.thouzands.worldgriddeployer.WorldGridDeployerSubLevelState;
-import dev.thouzands.worldgriddeployer.WorldGridDebugNetworking;
-import dev.thouzands.worldgriddeployer.WorldGridPlacementOutcome;
+import co.thouzands.worldgriddeployer.FaceConnectedVoxelTraversal;
+import co.thouzands.worldgriddeployer.FaceConnectedVoxelTraversal.Step;
+import co.thouzands.worldgriddeployer.WorldGridDeployerAccess;
+import co.thouzands.worldgriddeployer.WorldGridDeployerSubLevelState;
+import co.thouzands.worldgriddeployer.WorldGridDebugNetworking;
+import co.thouzands.worldgriddeployer.WorldGridPlacementOutcome;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;

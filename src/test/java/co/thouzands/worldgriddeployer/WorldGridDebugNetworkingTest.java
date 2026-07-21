@@ -1,10 +1,10 @@
-package dev.thouzands.worldgriddeployer;
+package co.thouzands.worldgriddeployer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import dev.thouzands.worldgriddeployer.WorldGridDebugNetworking.DebugSubscriptionPayload;
-import dev.thouzands.worldgriddeployer.WorldGridDebugNetworking.OutcomeBatchPayload;
-import dev.thouzands.worldgriddeployer.WorldGridDebugNetworking.OutcomeEntry;
+import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.DebugSubscriptionPayload;
+import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.OutcomeBatchPayload;
+import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.OutcomeEntry;
 import io.netty.buffer.Unpooled;
 import java.util.List;
 import net.minecraft.core.BlockPos;
