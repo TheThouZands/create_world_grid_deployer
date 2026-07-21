@@ -352,6 +352,10 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
     }
 
     private static Component resultMessage(SettingsSnapshotPayload snapshot) {
+        if (!snapshot.editable() && "none".equals(snapshot.result())) {
+            return Component.translatable("worldgriddeployer.config.access.result.read_only")
+                .withStyle(ChatFormatting.YELLOW);
+        }
         String key = "worldgriddeployer.config.access.result." + snapshot.result();
         ChatFormatting color = switch (snapshot.result()) {
             case "saved" -> ChatFormatting.GREEN;
@@ -367,9 +371,15 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
     @Override
     protected void renderWindow(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
         int top = Math.max(0, this.height / 2 - 118);
-        String contextKey = this.minecraft != null && this.minecraft.getSingleplayerServer() != null
-            ? "worldgriddeployer.config.access.context.lan"
-            : "worldgriddeployer.config.access.context.multiplayer";
+        boolean integratedServer = this.minecraft != null && this.minecraft.getSingleplayerServer() != null;
+        boolean readOnly = this.snapshot != null && !this.snapshot.editable();
+        String contextKey = integratedServer
+            ? readOnly
+                ? "worldgriddeployer.config.access.context.lan_locked"
+                : "worldgriddeployer.config.access.context.lan"
+            : readOnly
+                ? "worldgriddeployer.config.access.context.multiplayer_locked"
+                : "worldgriddeployer.config.access.context.multiplayer";
         graphics.drawCenteredString(this.font, Component.translatable(contextKey), this.width / 2, top + 33, 0xffe0d8c8);
 
         if (this.rows().isEmpty()) {
