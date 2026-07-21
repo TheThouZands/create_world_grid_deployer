@@ -5,10 +5,12 @@ import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.PlayerEntry;
 import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.SettingsSnapshotPayload;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import javax.annotation.Nullable;
 import net.minecraft.ChatFormatting;
@@ -29,6 +31,7 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
     private EditBox username;
     private final Map<UUID, PlayerEntry> retained = new LinkedHashMap<>();
     private final List<String> pendingAdds = new ArrayList<>();
+    private final Set<UUID> pendingRemovals = new HashSet<>();
     private WorldGridDebugAccess.Policy policy = WorldGridDebugAccess.Policy.OPS_ONLY;
     private long receivedGeneration = -1L;
     private boolean requested;
@@ -107,14 +110,18 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
                     this.rebuildPreservingInput();
                 },
                 editable,
-                tipTitle(row.pending()
-                    ? "worldgriddeployer.config.access.pending"
-                    : "worldgriddeployer.config.access.whitelisted"),
+                tipTitle(switch (row.state()) {
+                    case ADDING -> "worldgriddeployer.config.access.pending";
+                    case REMOVING -> "worldgriddeployer.config.access.removing";
+                    case CURRENT -> "worldgriddeployer.config.access.whitelisted";
+                }),
                 row.tooltip(),
                 editable
-                    ? tipAction(row.pending()
-                        ? "worldgriddeployer.config.access.undo_add.tooltip"
-                        : "worldgriddeployer.config.access.remove.tooltip")
+                    ? tipAction(switch (row.state()) {
+                        case ADDING -> "worldgriddeployer.config.access.undo_add.tooltip";
+                        case REMOVING -> "worldgriddeployer.config.access.keep.tooltip";
+                        case CURRENT -> "worldgriddeployer.config.access.remove.tooltip";
+                    })
                     : lockedTip()
             );
         }
@@ -216,6 +223,7 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
         this.retained.clear();
         received.whitelist().forEach(entry -> this.retained.put(entry.id(), entry));
         this.pendingAdds.clear();
+        this.pendingRemovals.clear();
         this.inputValue = "";
         this.page = 0;
         this.status = resultMessage(received);
@@ -256,7 +264,9 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
         WorldGridSettingsClient.update(
             this.snapshot.revision(),
             this.policy.serializedName(),
-            List.copyOf(this.retained.keySet()),
+            this.retained.keySet().stream()
+                .filter(id -> !this.pendingRemovals.contains(id))
+                .toList(),
             List.copyOf(this.pendingAdds)
         );
     }
@@ -265,30 +275,58 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
         List<WhitelistRow> rows = new ArrayList<>();
         this.retained.values().stream()
             .sorted(Comparator.comparing(PlayerEntry::name, String.CASE_INSENSITIVE_ORDER))
-            .forEach(entry -> rows.add(new WhitelistRow(
-                Component.translatable("worldgriddeployer.config.access.entry", entry.name()),
-                tipCurrent("worldgriddeployer.config.access.entry.tooltip", entry.id()),
-                false,
-                () -> this.retained.remove(entry.id())
-            )));
+            .forEach(entry -> {
+                boolean removing = this.pendingRemovals.contains(entry.id());
+                rows.add(new WhitelistRow(
+                    Component.translatable(
+                        removing
+                            ? "worldgriddeployer.config.access.entry.removing"
+                            : "worldgriddeployer.config.access.entry",
+                        entry.name()
+                    ).withStyle(removing ? ChatFormatting.RED : ChatFormatting.RESET),
+                    tipCurrent("worldgriddeployer.config.access.entry.tooltip", entry.id()),
+                    removing ? RowState.REMOVING : RowState.CURRENT,
+                    () -> this.toggleRemoval(entry)
+                ));
+            });
         this.pendingAdds.stream()
             .sorted(String.CASE_INSENSITIVE_ORDER)
             .forEach(name -> rows.add(new WhitelistRow(
                 Component.translatable("worldgriddeployer.config.access.entry.pending", name),
                 tipCurrent("worldgriddeployer.config.access.entry.pending.tooltip", name),
-                true,
-                () -> this.pendingAdds.removeIf(value -> value.equalsIgnoreCase(name))
+                RowState.ADDING,
+                () -> this.undoPendingAdd(name)
             )));
         return rows;
     }
 
+    private void toggleRemoval(PlayerEntry entry) {
+        if (this.pendingRemovals.remove(entry.id())) {
+            this.status = Component.translatable("worldgriddeployer.config.access.result.kept", entry.name())
+                .withStyle(ChatFormatting.GREEN);
+        } else {
+            this.pendingRemovals.add(entry.id());
+            this.status = Component.translatable("worldgriddeployer.config.access.result.removing", entry.name())
+                .withStyle(ChatFormatting.YELLOW);
+        }
+    }
+
+    private void undoPendingAdd(String name) {
+        this.pendingAdds.removeIf(value -> value.equalsIgnoreCase(name));
+        this.status = Component.translatable("worldgriddeployer.config.access.result.add_undone", name)
+            .withStyle(ChatFormatting.GRAY);
+    }
+
     private boolean isDirty() {
-        if (this.snapshot == null || !this.snapshot.policy().equals(this.policy.serializedName()) || !this.pendingAdds.isEmpty()) {
+        if (
+            this.snapshot == null
+                || !this.snapshot.policy().equals(this.policy.serializedName())
+                || !this.pendingAdds.isEmpty()
+                || !this.pendingRemovals.isEmpty()
+        ) {
             return true;
         }
-        return !this.retained.keySet().equals(
-            this.snapshot.whitelist().stream().map(PlayerEntry::id).collect(java.util.stream.Collectors.toSet())
-        );
+        return false;
     }
 
     @Nullable
@@ -409,5 +447,11 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
         }
     }
 
-    private record WhitelistRow(Component label, Component tooltip, boolean pending, Runnable remove) {}
+    private enum RowState {
+        CURRENT,
+        ADDING,
+        REMOVING
+    }
+
+    private record WhitelistRow(Component label, Component tooltip, RowState state, Runnable remove) {}
 }

@@ -66,8 +66,10 @@
   "worldgriddeployer.config.access.add.tooltip": "Adds this name to your unsaved changes. Select Apply Changes to update the server.",
   "worldgriddeployer.config.access.autocomplete.tooltip": "Online and already-listed names autocomplete. Type a prefix and press Tab; Enter adds it. Other cached names may still be entered in full.",
   "worldgriddeployer.config.access.pending": "New Player",
+  "worldgriddeployer.config.access.removing": "Removal Pending",
   "worldgriddeployer.config.access.whitelisted": "Whitelisted Player",
   "worldgriddeployer.config.access.remove.tooltip": "Click to mark this player for removal. Apply Changes updates the policy and player list together.",
+  "worldgriddeployer.config.access.keep.tooltip": "Click to keep this player and cancel the pending removal.",
   "worldgriddeployer.config.access.undo_add.tooltip": "Click to undo this addition before applying the changes.",
   "worldgriddeployer.config.access.previous": "Previous Page",
   "worldgriddeployer.config.access.next": "Next Page",
@@ -79,6 +81,7 @@
   "worldgriddeployer.config.access.save.no_changes": "There are no unsaved policy or player-list changes.",
   "worldgriddeployer.config.access.saving": "Applying changes…",
   "worldgriddeployer.config.access.entry": "Remove: %s",
+  "worldgriddeployer.config.access.entry.removing": "Undo Removal: %s",
   "worldgriddeployer.config.access.entry.tooltip": "Stored identity: %s",
   "worldgriddeployer.config.access.entry.pending": "Undo Add: %s",
   "worldgriddeployer.config.access.entry.pending.tooltip": "%s will be resolved to a stored identity when changes are applied.",
@@ -92,5 +95,8 @@
   "worldgriddeployer.config.access.result.invalid": "The server rejected invalid settings (%s); no changes were applied.",
   "worldgriddeployer.config.access.result.empty_name": "Enter a username before adding it.",
   "worldgriddeployer.config.access.result.duplicate": "%s is already in the player list.",
-  "worldgriddeployer.config.access.result.staged": "%s will be added when you select Apply Changes."
+  "worldgriddeployer.config.access.result.staged": "%s will be added when you select Apply Changes.",
+  "worldgriddeployer.config.access.result.removing": "%s will be removed when you select Apply Changes.",
+  "worldgriddeployer.config.access.result.kept": "%s will remain on the whitelist.",
+  "worldgriddeployer.config.access.result.add_undone": "%s will not be added."
 }
