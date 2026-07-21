@@ -55,7 +55,6 @@ public final class WorldGridDebugNetworking {
     private static final Set<UUID> REQUESTED_SUBSCRIBERS = new HashSet<>();
     private static final Set<UUID> ACTIVE_SUBSCRIBERS = new HashSet<>();
     private static final Map<ResourceKey<Level>, List<OutcomeEntry>> PENDING = new HashMap<>();
-    private static final Map<String, GameProfile> VERIFIED_LOOKUPS = new HashMap<>();
 
     private WorldGridDebugNetworking() {}
 
@@ -105,7 +104,6 @@ public final class WorldGridDebugNetworking {
         REQUESTED_SUBSCRIBERS.clear();
         ACTIVE_SUBSCRIBERS.clear();
         PENDING.clear();
-        VERIFIED_LOOKUPS.clear();
     }
 
     public static void registerPayloadHandlers(RegisterPayloadHandlersEvent event) {
@@ -252,7 +250,7 @@ public final class WorldGridDebugNetworking {
                     sendSettingsSnapshot(serverPlayer, SettingsResult.INVALID, "player_name");
                     return;
                 }
-                Optional<GameProfile> profile = resolveProfile(server, checkedName);
+                Optional<GameProfile> profile = onlineProfile(server, checkedName);
                 if (profile.isPresent() && profile.get().getId() != null) {
                     replacement.add(profile.get().getId());
                 } else if (replacementPending.stream().noneMatch(checkedName::equalsIgnoreCase)) {
@@ -301,11 +299,10 @@ public final class WorldGridDebugNetworking {
             }
             ServerPlayer online = server.getPlayerList().getPlayerByName(name);
             if (online != null) {
-                rememberProfile(online.getGameProfile());
                 sendNameLookupResult(
                     serverPlayer,
                     name,
-                    NameLookupStatus.FOUND,
+                    NameLookupStatus.SERVER_KNOWN,
                     online.getGameProfile().getName()
                 );
                 return;
@@ -326,7 +323,6 @@ public final class WorldGridDebugNetworking {
                 if (error != null) {
                     sendNameLookupResult(serverPlayer, name, NameLookupStatus.ERROR, "");
                 } else if (profile.isPresent()) {
-                    rememberProfile(profile.get());
                     sendNameLookupResult(
                         serverPlayer,
                         name,
@@ -356,21 +352,9 @@ public final class WorldGridDebugNetworking {
         );
     }
 
-    private static Optional<GameProfile> resolveProfile(MinecraftServer server, String name) {
+    private static Optional<GameProfile> onlineProfile(MinecraftServer server, String name) {
         ServerPlayer online = server.getPlayerList().getPlayerByName(name);
-        if (online != null) {
-            return Optional.of(online.getGameProfile());
-        }
-        if (!server.usesAuthentication()) {
-            return Optional.empty();
-        }
-        return Optional.ofNullable(VERIFIED_LOOKUPS.get(name.toLowerCase(Locale.ROOT)));
-    }
-
-    private static void rememberProfile(GameProfile profile) {
-        if (profile.getId() != null && profile.getName() != null) {
-            VERIFIED_LOOKUPS.put(profile.getName().toLowerCase(Locale.ROOT), profile);
-        }
+        return online == null ? Optional.empty() : Optional.of(online.getGameProfile());
     }
 
     private static void sendSettingsSnapshot(ServerPlayer player, SettingsResult result, String detail) {
@@ -653,6 +637,7 @@ public final class WorldGridDebugNetworking {
     }
 
     public enum NameLookupStatus {
+        SERVER_KNOWN("server_known"),
         FOUND("found"),
         NOT_FOUND("not_found"),
         PENDING("pending"),

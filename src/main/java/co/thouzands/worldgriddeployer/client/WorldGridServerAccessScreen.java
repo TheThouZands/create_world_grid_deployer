@@ -419,10 +419,14 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
     private void applyNameLookup(NameLookupResultPayload lookup) {
         NameLookupStatus lookupStatus = NameLookupStatus.byName(lookup.status());
         this.nameLookupStatus = switch (lookupStatus) {
+            case SERVER_KNOWN -> Component.translatable(
+                "worldgriddeployer.config.access.lookup.server_known",
+                lookup.canonicalName()
+            ).withStyle(ChatFormatting.GREEN);
             case FOUND -> Component.translatable(
                 "worldgriddeployer.config.access.lookup.found",
                 lookup.canonicalName()
-            ).withStyle(ChatFormatting.GREEN);
+            ).withStyle(ChatFormatting.AQUA);
             case PENDING -> Component.translatable(
                 "worldgriddeployer.config.access.lookup.pending",
                 lookup.canonicalName()

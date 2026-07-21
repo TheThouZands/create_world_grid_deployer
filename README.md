@@ -179,12 +179,14 @@ GUI changes remain local until **Apply Changes** sends the selected policy,
 retained UUIDs, retained pending names, and newly typed usernames as one
 revision-checked edit. Typing pauses briefly before an asynchronous server-backed
 lookup reports whether the account exists; known server names also support Tab
-completion. A verified account is stored by UUID. An unknown name is not allowed
-to invalidate the batch: it is persisted as a case-insensitive pending invitation
-and converted to the authenticated UUID when that exact player later joins.
-Offline-mode servers cannot verify remote accounts, so an offline player is kept
-pending until their first matching login. Stale screens, invalid username syntax,
-and insufficient permission still reject the entire edit atomically.
+completion. The remote account result is informational only: a name that has not
+joined the current server remains a case-insensitive pending invitation even when
+Mojang confirms an official account with that name. This avoids binding an
+offline or hybrid-auth player to somebody else's official UUID. Only a matching
+player currently online can bind immediately; otherwise the pending name converts
+to whatever authenticated or offline UUID this server actually assigns on first
+join. Stale screens, invalid username syntax, and insufficient permission still
+reject the entire edit atomically.
 
 In private single-player the server-access page is hidden because there are no
 remote players to authorize. Once the integrated server is published to LAN,

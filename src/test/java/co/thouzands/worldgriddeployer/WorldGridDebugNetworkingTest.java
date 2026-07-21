@@ -8,6 +8,7 @@ import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.OutcomeEntry;
 import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.PlayerEntry;
 import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.NameLookupRequestPayload;
 import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.NameLookupResultPayload;
+import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.NameLookupStatus;
 import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.SettingsRequestPayload;
 import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.SettingsSnapshotPayload;
 import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.SettingsUpdatePayload;
@@ -99,6 +100,7 @@ class WorldGridDebugNetworkingTest {
 
     @Test
     void roundTripsNameLookupPayloads() {
+        assertEquals(NameLookupStatus.SERVER_KNOWN, NameLookupStatus.byName("server_known"));
         RegistryFriendlyByteBuf requestBuffer = buffer();
         try {
             NameLookupRequestPayload request = new NameLookupRequestPayload("FuturePlayer");
