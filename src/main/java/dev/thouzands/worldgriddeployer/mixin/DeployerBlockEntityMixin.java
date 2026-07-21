@@ -161,6 +161,20 @@ public abstract class DeployerBlockEntityMixin extends KineticBlockEntity
         tag.putBoolean(WORLD_GRID_NBT_KEY, this.worldgriddeployer$enabled);
     }
 
+    /**
+     * Create uses this reduced NBT path when a block entity is copied into a
+     * contraption/sublevel snapshot. Keep the extended mode alongside Create's
+     * own safe "Mode" value so Sable can restore it after a server restart.
+     */
+    @Inject(method = "writeSafe", at = @At("TAIL"))
+    private void worldgriddeployer$writeSafeMode(
+        CompoundTag tag,
+        HolderLookup.Provider registries,
+        CallbackInfo ci
+    ) {
+        tag.putBoolean(WORLD_GRID_NBT_KEY, this.worldgriddeployer$enabled);
+    }
+
     @Inject(method = "read", at = @At("TAIL"))
     private void worldgriddeployer$readMode(
         CompoundTag tag,
@@ -168,7 +182,11 @@ public abstract class DeployerBlockEntityMixin extends KineticBlockEntity
         boolean clientPacket,
         CallbackInfo ci
     ) {
-        this.worldgriddeployer$enabled = tag.getBoolean(WORLD_GRID_NBT_KEY);
+        // Some Create/Sable update tags are intentionally partial. Absence must
+        // not erase a value that was already restored from the full save tag.
+        if (tag.contains(WORLD_GRID_NBT_KEY)) {
+            this.worldgriddeployer$enabled = tag.getBoolean(WORLD_GRID_NBT_KEY);
+        }
         this.worldgriddeployer$resetTraversal();
     }
 
