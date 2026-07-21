@@ -1,5 +1,6 @@
 package co.thouzands.worldgriddeployer.client;
 
+import net.minecraft.client.gui.screens.Screen;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 
@@ -10,7 +11,11 @@ public final class WorldGridConfigClient {
     public static void register(ModContainer container) {
         container.registerExtensionPoint(
             IConfigScreenFactory.class,
-            (ignored, parent) -> new WorldGridConfigScreen(parent)
+            (ignored, parent) -> createScreen(parent)
         );
+    }
+
+    public static Screen createScreen(Screen parent) {
+        return new WorldGridConfigScreen(parent);
     }
 }

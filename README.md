@@ -168,7 +168,9 @@ Policy and whitelist commands require command permission level 3:
 
 The same controls are available from the Create-styled configuration screen.
 Open the mod's **Config** button in NeoForge's Mods list, or run the client
-command `/worldgriddeployer config` while connected. The server page always
+command `/worldgriddeployer config` while connected. The mod also appears as an
+available entry in Create's **Access Configs of other Mods** list and opens this
+same custom screen rather than a dummy file-backed config. The server page always
 loads an authoritative snapshot. Players below permission level 3 can inspect
 it but every mutating control is locked; permission is checked again when Apply Changes
 reaches the server.
