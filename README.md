@@ -59,7 +59,8 @@ Use a wrench on Create's normal deployer mode selector:
 
 Create's internal mode enum remains unchanged. World-Grid Use is represented as
 Create's ordinary `USE` mode plus a separate persisted boolean owned by this
-patch. Create goggles display the additional mode explicitly.
+patch. While that flag is active, Create goggles show World-Grid Use in the
+ordinary mode row, as though it were a native third option.
 
 The flag may remain set while a deployer is disassembled, but the special tick
 and placement behavior activates only while the deployer is mounted on a Sable

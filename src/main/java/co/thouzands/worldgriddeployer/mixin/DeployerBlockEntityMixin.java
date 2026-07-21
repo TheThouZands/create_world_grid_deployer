@@ -26,6 +26,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
@@ -624,16 +625,39 @@ public abstract class DeployerBlockEntityMixin extends KineticBlockEntity
         this.worldgriddeployer$subLevelStateLoaded = true;
     }
 
-    @Inject(method = "addToGoggleTooltip", at = @At("TAIL"), cancellable = true)
-    private void worldgriddeployer$appendGoggleMode(
+    @Inject(
+        method = "addToGoggleTooltip",
+        at = @At(
+            value = "INVOKE",
+            target = "Lnet/createmod/catnip/lang/LangBuilder;forGoggles(Ljava/util/List;)V",
+            ordinal = 1,
+            shift = At.Shift.AFTER
+        )
+    )
+    private void worldgriddeployer$replaceGoggleMode(
         List<Component> tooltip,
         boolean isPlayerSneaking,
         CallbackInfoReturnable<Boolean> cir
     ) {
-        if (this.worldgriddeployer$enabled) {
-            tooltip.add(Component.translatable("worldgriddeployer.mode").withStyle(ChatFormatting.AQUA));
-            cir.setReturnValue(true);
+        if (!this.worldgriddeployer$enabled || tooltip.isEmpty()) {
+            return;
         }
+
+        int modeLine = tooltip.size() - 1;
+        MutableComponent replacement = tooltip.get(modeLine).copy();
+        List<Component> values = replacement.getSiblings();
+        if (values.isEmpty()) {
+            tooltip.set(modeLine, Component.translatable("worldgriddeployer.mode").withStyle(ChatFormatting.YELLOW));
+            return;
+        }
+
+        int valueIndex = values.size() - 1;
+        Component nativeMode = values.get(valueIndex);
+        values.set(
+            valueIndex,
+            Component.translatable("worldgriddeployer.mode").withStyle(nativeMode.getStyle())
+        );
+        tooltip.set(modeLine, replacement);
     }
 
     @Unique
