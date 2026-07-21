@@ -6,6 +6,7 @@ license = "MIT"
 modId = "worldgriddeployer"
 version = "0.1.0"
 displayName = "Create World-Grid Deployer"
+logoFile = "worldgriddeployer.png"
 authors = "thouzands"
 description = '''Adds bounded, swept world-grid placement to Create deployers mounted on Sable physics contraptions.'''
 

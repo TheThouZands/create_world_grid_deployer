@@ -1,5 +1,9 @@
 # Create World-Grid Deployer
 
+<p align="center">
+  <img src="src/main/resources/worldgriddeployer.png" alt="Create World-Grid Deployer logo" width="256">
+</p>
+
 A focused NeoForge 1.21.1 compatibility patch for Create 6.0.10 and Sable
 2.0.3. It adds a third, **World-Grid Use** mode to Create deployers mounted on
 Sable physics sublevels.
