@@ -35,7 +35,7 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
     @Nullable
     private EditBox username;
     @Nullable
-    private ConfigScreenList whitelist;
+    private WhitelistList whitelist;
     private final Map<UUID, PlayerEntry> retained = new LinkedHashMap<>();
     private final List<String> pendingAdds = new ArrayList<>();
     private final Set<UUID> pendingRemovals = new HashSet<>();
@@ -102,7 +102,7 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
         );
 
         List<WhitelistRow> rows = rows();
-        this.whitelist = new ConfigScreenList(this.minecraft, 320, 88, top + 106, 23);
+        this.whitelist = new WhitelistList(this.minecraft, 320, 88, top + 106, 23);
         this.whitelist.setX(center - 160);
         for (WhitelistRow row : rows) {
             this.whitelist.children().add(new WhitelistEntry(
@@ -410,6 +410,25 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
         }
     }
 
+    private static final class WhitelistList extends ConfigScreenList {
+        private WhitelistList(Minecraft minecraft, int width, int height, int top, int elementHeight) {
+            super(minecraft, width, height, top, elementHeight);
+        }
+
+        @Override
+        public boolean mouseClicked(double mouseX, double mouseY, int mouseButton) {
+            if (this.isMouseOver(mouseX, mouseY)) {
+                for (Entry entry : this.children()) {
+                    if (entry instanceof WhitelistEntry whitelistEntry
+                        && whitelistEntry.clickIfHovered(mouseX, mouseY, mouseButton)) {
+                        return true;
+                    }
+                }
+            }
+            return super.mouseClicked(mouseX, mouseY, mouseButton);
+        }
+    }
+
     private static final class WhitelistEntry extends ConfigScreenList.Entry {
         private final ScrollRowBoxWidget button;
 
@@ -428,6 +447,14 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
             this.button.updateGradientFromState();
             this.button.getToolTip().addAll(wrappedTooltip(tooltip));
             this.listeners.add(this.button);
+        }
+
+        private boolean clickIfHovered(double mouseX, double mouseY, int mouseButton) {
+            if (mouseButton != GLFW.GLFW_MOUSE_BUTTON_LEFT || !this.button.isMouseOver(mouseX, mouseY)) {
+                return false;
+            }
+            this.button.onClick(mouseX, mouseY);
+            return true;
         }
 
         @Override
