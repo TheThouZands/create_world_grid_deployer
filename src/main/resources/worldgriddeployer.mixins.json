@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.thouzands.worldgriddeployer.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "DeployerBlockEntityMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

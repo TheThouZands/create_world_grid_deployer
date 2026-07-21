@@ -1,0 +1,41 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "MIT"
+
+[[mods]]
+modId = "worldgriddeployer"
+version = "0.1.0"
+displayName = "Create World-Grid Deployer"
+authors = "thouzands"
+description = '''Adds bounded, swept world-grid placement to Create deployers mounted on Sable physics contraptions.'''
+
+[[mixins]]
+config = "worldgriddeployer.mixins.json"
+
+[[dependencies.worldgriddeployer]]
+modId = "neoforge"
+type = "required"
+versionRange = "[21.1.228,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.worldgriddeployer]]
+modId = "minecraft"
+type = "required"
+versionRange = "[1.21.1]"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.worldgriddeployer]]
+modId = "create"
+type = "required"
+versionRange = "[6.0.10,6.1.0)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.worldgriddeployer]]
+modId = "sable"
+type = "required"
+versionRange = "[2.0.3,2.1.0)"
+ordering = "AFTER"
+side = "BOTH"
