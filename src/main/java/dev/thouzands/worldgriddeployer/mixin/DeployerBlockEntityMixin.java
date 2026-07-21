@@ -13,6 +13,7 @@ import dev.ryanhcode.sable.sublevel.ServerSubLevel;
 import dev.thouzands.worldgriddeployer.FaceConnectedVoxelTraversal;
 import dev.thouzands.worldgriddeployer.FaceConnectedVoxelTraversal.Step;
 import dev.thouzands.worldgriddeployer.WorldGridDeployerAccess;
+import dev.thouzands.worldgriddeployer.WorldGridDeployerSubLevelState;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -108,6 +109,8 @@ public abstract class DeployerBlockEntityMixin extends KineticBlockEntity
     @Unique
     private boolean worldgriddeployer$enabled;
     @Unique
+    private boolean worldgriddeployer$subLevelStateLoaded;
+    @Unique
     private Vec3 worldgriddeployer$lastCenter;
     @Unique
     private Vec3 worldgriddeployer$lastTarget;
@@ -131,10 +134,14 @@ public abstract class DeployerBlockEntityMixin extends KineticBlockEntity
      */
     @Inject(method = "changeMode", at = @At("HEAD"), cancellable = true)
     private void worldgriddeployer$cycleWorldGridMode(CallbackInfo ci) {
+        ServerSubLevel subLevel = this.worldgriddeployer$getServerSubLevel();
+        this.worldgriddeployer$restoreSubLevelMode(subLevel);
+
         if (this.worldgriddeployer$enabled) {
             this.worldgriddeployer$enabled = false;
             this.worldgriddeployer$setReflected(WORLDGRIDDEPLOYER_MODE_FIELD, WORLDGRIDDEPLOYER_MODE_PUNCH);
             this.worldgriddeployer$resetOperatingState();
+            this.worldgriddeployer$persistSubLevelMode(subLevel);
             this.setChanged();
             this.sendData();
             ci.cancel();
@@ -144,6 +151,7 @@ public abstract class DeployerBlockEntityMixin extends KineticBlockEntity
         if (this.worldgriddeployer$getReflected(WORLDGRIDDEPLOYER_MODE_FIELD) == WORLDGRIDDEPLOYER_MODE_USE) {
             this.worldgriddeployer$enabled = true;
             this.worldgriddeployer$resetOperatingState();
+            this.worldgriddeployer$persistSubLevelMode(subLevel);
             this.setChanged();
             this.sendData();
             ci.cancel();
@@ -158,6 +166,9 @@ public abstract class DeployerBlockEntityMixin extends KineticBlockEntity
         boolean clientPacket,
         CallbackInfo ci
     ) {
+        if (!clientPacket) {
+            this.worldgriddeployer$restoreSubLevelMode(this.worldgriddeployer$getServerSubLevel());
+        }
         tag.putBoolean(WORLD_GRID_NBT_KEY, this.worldgriddeployer$enabled);
     }
 
@@ -172,6 +183,7 @@ public abstract class DeployerBlockEntityMixin extends KineticBlockEntity
         HolderLookup.Provider registries,
         CallbackInfo ci
     ) {
+        this.worldgriddeployer$restoreSubLevelMode(this.worldgriddeployer$getServerSubLevel());
         tag.putBoolean(WORLD_GRID_NBT_KEY, this.worldgriddeployer$enabled);
     }
 
@@ -215,6 +227,8 @@ public abstract class DeployerBlockEntityMixin extends KineticBlockEntity
 
     @Override
     public void sable$tick(ServerSubLevel subLevel) {
+        this.worldgriddeployer$restoreSubLevelMode(subLevel);
+
         if (!this.worldgriddeployer$isArmed()) {
             this.worldgriddeployer$resetTraversal();
             return;
@@ -508,6 +522,54 @@ public abstract class DeployerBlockEntityMixin extends KineticBlockEntity
         this.worldgriddeployer$lastTarget = null;
         this.worldgriddeployer$lastForward = null;
         this.worldgriddeployer$lastYawReference = null;
+    }
+
+    @Unique
+    private ServerSubLevel worldgriddeployer$getServerSubLevel() {
+        if (this.getLevel() == null || this.getLevel().isClientSide) {
+            return null;
+        }
+
+        Object containing = dev.ryanhcode.sable.Sable.HELPER.getContaining((BlockEntity) (Object) this);
+        return containing instanceof ServerSubLevel subLevel ? subLevel : null;
+    }
+
+    @Unique
+    private void worldgriddeployer$restoreSubLevelMode(ServerSubLevel subLevel) {
+        if (subLevel == null || this.worldgriddeployer$subLevelStateLoaded) {
+            return;
+        }
+
+        this.worldgriddeployer$subLevelStateLoaded = true;
+        CompoundTag userData = subLevel.getUserDataTag();
+        if (!WorldGridDeployerSubLevelState.contains(userData, this.worldPosition)) {
+            // First tick after assembly (or upgrade): seed Sable's extension
+            // data from the ordinary block-entity value.
+            this.worldgriddeployer$persistSubLevelMode(subLevel);
+            return;
+        }
+
+        boolean restored = WorldGridDeployerSubLevelState.isEnabled(userData, this.worldPosition);
+        if (this.worldgriddeployer$enabled != restored) {
+            this.worldgriddeployer$enabled = restored;
+            this.worldgriddeployer$resetOperatingState();
+            this.sendData();
+        }
+    }
+
+    @Unique
+    private void worldgriddeployer$persistSubLevelMode(ServerSubLevel subLevel) {
+        if (subLevel == null) {
+            return;
+        }
+
+        CompoundTag userData = WorldGridDeployerSubLevelState.setEnabled(
+            subLevel.getUserDataTag(),
+            this.worldPosition,
+            this.worldgriddeployer$enabled
+        );
+        subLevel.setUserDataTag(userData);
+        this.worldgriddeployer$subLevelStateLoaded = true;
     }
 
     @Inject(method = "addToGoggleTooltip", at = @At("TAIL"), cancellable = true)
