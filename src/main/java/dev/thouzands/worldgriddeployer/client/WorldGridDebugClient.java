@@ -135,6 +135,10 @@ public final class WorldGridDebugClient {
         VertexConsumer fill = buffers.getBuffer(OVERLAY_FILL);
 
         poseStack.pushPose();
+        // AFTER_LEVEL is dispatched with a null PoseStack, so NeoForge gives
+        // listeners a fresh identity stack. Restore GameRenderer's camera
+        // rotation before applying the world-to-camera translation.
+        poseStack.mulPose(event.getModelViewMatrix());
         poseStack.translate(-camera.x, -camera.y, -camera.z);
 
         if (HISTORY.blockTrailEnabled()) {
