@@ -6,6 +6,8 @@ import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.DebugSubscription
 import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.OutcomeBatchPayload;
 import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.OutcomeEntry;
 import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.PlayerEntry;
+import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.NameLookupRequestPayload;
+import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.NameLookupResultPayload;
 import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.SettingsRequestPayload;
 import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.SettingsSnapshotPayload;
 import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.SettingsUpdatePayload;
@@ -62,6 +64,7 @@ class WorldGridDebugNetworkingTest {
             37L,
             "whitelist",
             List.of(UUID.randomUUID(), UUID.randomUUID()),
+            List.of("FuturePlayer"),
             List.of("Angus", "Julianca")
         );
         RegistryFriendlyByteBuf buffer = buffer();
@@ -80,6 +83,7 @@ class WorldGridDebugNetworkingTest {
             true,
             "ops",
             List.of(new PlayerEntry(UUID.randomUUID(), "thethouzands")),
+            List.of("FuturePlayer"),
             List.of("Angus", "Julianca", "thethouzands"),
             "unknown_player",
             "NotCached"
@@ -90,6 +94,31 @@ class WorldGridDebugNetworkingTest {
             assertEquals(expected, SettingsSnapshotPayload.STREAM_CODEC.decode(buffer));
         } finally {
             buffer.release();
+        }
+    }
+
+    @Test
+    void roundTripsNameLookupPayloads() {
+        RegistryFriendlyByteBuf requestBuffer = buffer();
+        try {
+            NameLookupRequestPayload request = new NameLookupRequestPayload("FuturePlayer");
+            NameLookupRequestPayload.STREAM_CODEC.encode(requestBuffer, request);
+            assertEquals(request, NameLookupRequestPayload.STREAM_CODEC.decode(requestBuffer));
+        } finally {
+            requestBuffer.release();
+        }
+
+        RegistryFriendlyByteBuf resultBuffer = buffer();
+        try {
+            NameLookupResultPayload result = new NameLookupResultPayload(
+                "futureplayer",
+                "found",
+                "FuturePlayer"
+            );
+            NameLookupResultPayload.STREAM_CODEC.encode(resultBuffer, result);
+            assertEquals(result, NameLookupResultPayload.STREAM_CODEC.decode(resultBuffer));
+        } finally {
+            resultBuffer.release();
         }
     }
 

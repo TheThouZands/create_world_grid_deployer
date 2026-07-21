@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -25,6 +26,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.GameProfileCache;
+import net.minecraft.util.StringUtil;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -48,7 +50,8 @@ public final class WorldGridDebugNetworking {
     private static final int MAX_WHITELIST_ENTRIES = 256;
     private static final int MAX_ADDED_NAMES = 32;
     private static final int MAX_SUGGESTIONS = 256;
-    private static final int MAX_PLAYER_NAME_LENGTH = 64;
+    private static final int MAX_PLAYER_NAME_LENGTH = 16;
+    private static final int MAX_DETAIL_LENGTH = 64;
     private static final Set<UUID> REQUESTED_SUBSCRIBERS = new HashSet<>();
     private static final Set<UUID> ACTIVE_SUBSCRIBERS = new HashSet<>();
     private static final Map<ResourceKey<Level>, List<OutcomeEntry>> PENDING = new HashMap<>();
@@ -104,7 +107,7 @@ public final class WorldGridDebugNetworking {
     }
 
     public static void registerPayloadHandlers(RegisterPayloadHandlersEvent event) {
-        var registrar = event.registrar("1").optional();
+        var registrar = event.registrar("2").optional();
         registrar.playToServer(
             DebugSubscriptionPayload.TYPE,
             DebugSubscriptionPayload.STREAM_CODEC,
@@ -129,6 +132,16 @@ public final class WorldGridDebugNetworking {
             SettingsSnapshotPayload.TYPE,
             SettingsSnapshotPayload.STREAM_CODEC,
             WorldGridDebugNetworking::handleSettingsSnapshotClient
+        );
+        registrar.playToServer(
+            NameLookupRequestPayload.TYPE,
+            NameLookupRequestPayload.STREAM_CODEC,
+            WorldGridDebugNetworking::handleNameLookupRequest
+        );
+        registrar.playToClient(
+            NameLookupResultPayload.TYPE,
+            NameLookupResultPayload.STREAM_CODEC,
+            WorldGridDebugNetworking::handleNameLookupResultClient
         );
     }
 
@@ -218,20 +231,38 @@ public final class WorldGridDebugNetworking {
                 return;
             }
 
-            for (String name : payload.addedPlayers()) {
-                Optional<GameProfile> profile = resolveProfile(server, name);
-                if (profile.isEmpty() || profile.get().getId() == null) {
-                    sendSettingsSnapshot(serverPlayer, SettingsResult.UNKNOWN_PLAYER, name);
+            List<String> currentPending = access.pendingPlayers();
+            LinkedHashSet<String> replacementPending = new LinkedHashSet<>();
+            for (String retainedName : payload.retainedPendingPlayers()) {
+                Optional<String> currentName = currentPending.stream()
+                    .filter(name -> name.equalsIgnoreCase(retainedName))
+                    .findFirst();
+                if (currentName.isEmpty()) {
+                    sendSettingsSnapshot(serverPlayer, SettingsResult.INVALID, "pending_whitelist");
                     return;
                 }
-                replacement.add(profile.get().getId());
+                replacementPending.add(currentName.get());
             }
-            if (replacement.size() > MAX_WHITELIST_ENTRIES) {
+
+            for (String name : payload.addedPlayers()) {
+                String checkedName = name.trim();
+                if (checkedName.isEmpty() || !StringUtil.isValidPlayerName(checkedName)) {
+                    sendSettingsSnapshot(serverPlayer, SettingsResult.INVALID, "player_name");
+                    return;
+                }
+                Optional<GameProfile> profile = resolveProfile(server, checkedName);
+                if (profile.isPresent() && profile.get().getId() != null) {
+                    replacement.add(profile.get().getId());
+                } else if (replacementPending.stream().noneMatch(checkedName::equalsIgnoreCase)) {
+                    replacementPending.add(checkedName);
+                }
+            }
+            if (replacement.size() + replacementPending.size() > MAX_WHITELIST_ENTRIES) {
                 sendSettingsSnapshot(serverPlayer, SettingsResult.INVALID, "whitelist_size");
                 return;
             }
 
-            access.replaceSettings(policy.get(), replacement);
+            access.replaceSettings(policy.get(), replacement, replacementPending);
             refreshAuthorization(server);
             sendSettingsSnapshot(serverPlayer, SettingsResult.SAVED, "");
         });
@@ -239,6 +270,86 @@ public final class WorldGridDebugNetworking {
 
     private static void handleSettingsSnapshotClient(SettingsSnapshotPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> WorldGridSettingsClient.receive(payload));
+    }
+
+    private static void handleNameLookupRequest(NameLookupRequestPayload payload, IPayloadContext context) {
+        if (!(context.player() instanceof ServerPlayer serverPlayer)) {
+            return;
+        }
+        context.enqueueWork(() -> {
+            MinecraftServer server = serverPlayer.getServer();
+            if (server == null) {
+                return;
+            }
+            String name = payload.name().trim();
+            if (!serverPlayer.hasPermissions(3)) {
+                sendNameLookupResult(serverPlayer, name, NameLookupStatus.NO_PERMISSION, "");
+                return;
+            }
+            if (name.isEmpty() || !StringUtil.isValidPlayerName(name)) {
+                sendNameLookupResult(serverPlayer, name, NameLookupStatus.INVALID, "");
+                return;
+            }
+            Optional<String> pending = WorldGridDebugAccess.get(server).pendingPlayers().stream()
+                .filter(candidate -> candidate.equalsIgnoreCase(name))
+                .findFirst();
+            if (pending.isPresent()) {
+                sendNameLookupResult(serverPlayer, name, NameLookupStatus.PENDING, pending.get());
+                return;
+            }
+            ServerPlayer online = server.getPlayerList().getPlayerByName(name);
+            if (online != null) {
+                sendNameLookupResult(
+                    serverPlayer,
+                    name,
+                    NameLookupStatus.FOUND,
+                    online.getGameProfile().getName()
+                );
+                return;
+            }
+            if (!server.usesAuthentication()) {
+                sendNameLookupResult(serverPlayer, name, NameLookupStatus.OFFLINE_MODE, "");
+                return;
+            }
+            GameProfileCache cache = server.getProfileCache();
+            if (cache == null) {
+                sendNameLookupResult(serverPlayer, name, NameLookupStatus.ERROR, "");
+                return;
+            }
+            cache.getAsync(name).whenComplete((profile, error) -> server.execute(() -> {
+                if (server.getPlayerList().getPlayer(serverPlayer.getUUID()) != serverPlayer) {
+                    return;
+                }
+                if (error != null) {
+                    sendNameLookupResult(serverPlayer, name, NameLookupStatus.ERROR, "");
+                } else if (profile.isPresent()) {
+                    sendNameLookupResult(
+                        serverPlayer,
+                        name,
+                        NameLookupStatus.FOUND,
+                        profile.get().getName()
+                    );
+                } else {
+                    sendNameLookupResult(serverPlayer, name, NameLookupStatus.NOT_FOUND, "");
+                }
+            }));
+        });
+    }
+
+    private static void handleNameLookupResultClient(NameLookupResultPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> WorldGridSettingsClient.receiveNameLookup(payload));
+    }
+
+    private static void sendNameLookupResult(
+        ServerPlayer player,
+        String query,
+        NameLookupStatus status,
+        String canonicalName
+    ) {
+        PacketDistributor.sendToPlayer(
+            player,
+            new NameLookupResultPayload(query, status.serializedName(), canonicalName)
+        );
     }
 
     private static Optional<GameProfile> resolveProfile(MinecraftServer server, String name) {
@@ -269,12 +380,16 @@ public final class WorldGridDebugNetworking {
             .sorted(String.CASE_INSENSITIVE_ORDER)
             .forEach(suggestions::add);
         whitelist.stream().map(PlayerEntry::name).forEach(suggestions::add);
+        access.pendingPlayers().stream()
+            .sorted(String.CASE_INSENSITIVE_ORDER)
+            .forEach(suggestions::add);
 
         PacketDistributor.sendToPlayer(player, new SettingsSnapshotPayload(
             access.revision(),
             player.hasPermissions(3),
             access.policy().serializedName(),
             whitelist,
+            access.pendingPlayers().stream().sorted(String.CASE_INSENSITIVE_ORDER).toList(),
             suggestions.stream().limit(MAX_SUGGESTIONS).toList(),
             result.serializedName(),
             detail
@@ -353,6 +468,7 @@ public final class WorldGridDebugNetworking {
         long expectedRevision,
         String policy,
         List<UUID> retainedPlayers,
+        List<String> retainedPendingPlayers,
         List<String> addedPlayers
     ) implements CustomPacketPayload {
         public static final Type<SettingsUpdatePayload> TYPE = new Type<>(id("settings_update"));
@@ -362,6 +478,12 @@ public final class WorldGridDebugNetworking {
         public SettingsUpdatePayload {
             policy = checkedString(policy, 16, "policy");
             retainedPlayers = checkedUuids(retainedPlayers, MAX_WHITELIST_ENTRIES, "retained players");
+            retainedPendingPlayers = checkedStrings(
+                retainedPendingPlayers,
+                MAX_WHITELIST_ENTRIES,
+                MAX_PLAYER_NAME_LENGTH,
+                "retained pending players"
+            );
             addedPlayers = checkedStrings(addedPlayers, MAX_ADDED_NAMES, MAX_PLAYER_NAME_LENGTH, "added players");
         }
 
@@ -370,6 +492,7 @@ public final class WorldGridDebugNetworking {
                 buffer.readVarLong(),
                 buffer.readUtf(16),
                 readUuids(buffer, MAX_WHITELIST_ENTRIES),
+                readStrings(buffer, MAX_WHITELIST_ENTRIES, MAX_PLAYER_NAME_LENGTH),
                 readStrings(buffer, MAX_ADDED_NAMES, MAX_PLAYER_NAME_LENGTH)
             );
         }
@@ -378,6 +501,7 @@ public final class WorldGridDebugNetworking {
             buffer.writeVarLong(this.expectedRevision);
             buffer.writeUtf(this.policy, 16);
             writeUuids(buffer, this.retainedPlayers);
+            writeStrings(buffer, this.retainedPendingPlayers, MAX_PLAYER_NAME_LENGTH);
             writeStrings(buffer, this.addedPlayers, MAX_PLAYER_NAME_LENGTH);
         }
 
@@ -392,6 +516,7 @@ public final class WorldGridDebugNetworking {
         boolean editable,
         String policy,
         List<PlayerEntry> whitelist,
+        List<String> pendingPlayers,
         List<String> suggestions,
         String result,
         String detail
@@ -403,9 +528,15 @@ public final class WorldGridDebugNetworking {
         public SettingsSnapshotPayload {
             policy = checkedString(policy, 16, "policy");
             whitelist = checkedPlayers(whitelist);
+            pendingPlayers = checkedStrings(
+                pendingPlayers,
+                MAX_WHITELIST_ENTRIES,
+                MAX_PLAYER_NAME_LENGTH,
+                "pending players"
+            );
             suggestions = checkedStrings(suggestions, MAX_SUGGESTIONS, MAX_PLAYER_NAME_LENGTH, "suggestions");
             result = checkedString(result, 24, "result");
-            detail = checkedString(detail, MAX_PLAYER_NAME_LENGTH, "detail");
+            detail = checkedString(detail, MAX_DETAIL_LENGTH, "detail");
         }
 
         private SettingsSnapshotPayload(RegistryFriendlyByteBuf buffer) {
@@ -414,9 +545,10 @@ public final class WorldGridDebugNetworking {
                 buffer.readBoolean(),
                 buffer.readUtf(16),
                 readPlayers(buffer),
+                readStrings(buffer, MAX_WHITELIST_ENTRIES, MAX_PLAYER_NAME_LENGTH),
                 readStrings(buffer, MAX_SUGGESTIONS, MAX_PLAYER_NAME_LENGTH),
                 buffer.readUtf(24),
-                buffer.readUtf(MAX_PLAYER_NAME_LENGTH)
+                buffer.readUtf(MAX_DETAIL_LENGTH)
             );
         }
 
@@ -429,9 +561,10 @@ public final class WorldGridDebugNetworking {
                 buffer.writeUUID(entry.id());
                 buffer.writeUtf(entry.name(), MAX_PLAYER_NAME_LENGTH);
             }
+            writeStrings(buffer, this.pendingPlayers, MAX_PLAYER_NAME_LENGTH);
             writeStrings(buffer, this.suggestions, MAX_PLAYER_NAME_LENGTH);
             buffer.writeUtf(this.result, 24);
-            buffer.writeUtf(this.detail, MAX_PLAYER_NAME_LENGTH);
+            buffer.writeUtf(this.detail, MAX_DETAIL_LENGTH);
         }
 
         @Override
@@ -446,6 +579,94 @@ public final class WorldGridDebugNetworking {
                 throw new IllegalArgumentException("Player UUID is required");
             }
             name = checkedString(name, MAX_PLAYER_NAME_LENGTH, "player name");
+        }
+    }
+
+    public record NameLookupRequestPayload(String name) implements CustomPacketPayload {
+        public static final Type<NameLookupRequestPayload> TYPE = new Type<>(id("name_lookup_request"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, NameLookupRequestPayload> STREAM_CODEC =
+            CustomPacketPayload.codec(NameLookupRequestPayload::write, NameLookupRequestPayload::new);
+
+        public NameLookupRequestPayload {
+            name = checkedString(name, MAX_PLAYER_NAME_LENGTH, "lookup name");
+        }
+
+        private NameLookupRequestPayload(RegistryFriendlyByteBuf buffer) {
+            this(buffer.readUtf(MAX_PLAYER_NAME_LENGTH));
+        }
+
+        private void write(RegistryFriendlyByteBuf buffer) {
+            buffer.writeUtf(this.name, MAX_PLAYER_NAME_LENGTH);
+        }
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    public record NameLookupResultPayload(
+        String query,
+        String status,
+        String canonicalName
+    ) implements CustomPacketPayload {
+        public static final Type<NameLookupResultPayload> TYPE = new Type<>(id("name_lookup_result"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, NameLookupResultPayload> STREAM_CODEC =
+            CustomPacketPayload.codec(NameLookupResultPayload::write, NameLookupResultPayload::new);
+
+        public NameLookupResultPayload {
+            query = checkedString(query, MAX_PLAYER_NAME_LENGTH, "lookup query");
+            status = checkedString(status, 16, "lookup status");
+            canonicalName = checkedString(canonicalName, MAX_PLAYER_NAME_LENGTH, "canonical name");
+        }
+
+        private NameLookupResultPayload(RegistryFriendlyByteBuf buffer) {
+            this(
+                buffer.readUtf(MAX_PLAYER_NAME_LENGTH),
+                buffer.readUtf(16),
+                buffer.readUtf(MAX_PLAYER_NAME_LENGTH)
+            );
+        }
+
+        private void write(RegistryFriendlyByteBuf buffer) {
+            buffer.writeUtf(this.query, MAX_PLAYER_NAME_LENGTH);
+            buffer.writeUtf(this.status, 16);
+            buffer.writeUtf(this.canonicalName, MAX_PLAYER_NAME_LENGTH);
+        }
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    public enum NameLookupStatus {
+        FOUND("found"),
+        NOT_FOUND("not_found"),
+        PENDING("pending"),
+        OFFLINE_MODE("offline_mode"),
+        INVALID("invalid"),
+        NO_PERMISSION("no_permission"),
+        ERROR("error");
+
+        private final String serializedName;
+
+        NameLookupStatus(String serializedName) {
+            this.serializedName = serializedName;
+        }
+
+        public String serializedName() {
+            return this.serializedName;
+        }
+
+        public static NameLookupStatus byName(String name) {
+            String normalized = name.toLowerCase(Locale.ROOT);
+            for (NameLookupStatus status : values()) {
+                if (status.serializedName.equals(normalized)) {
+                    return status;
+                }
+            }
+            return ERROR;
         }
     }
 

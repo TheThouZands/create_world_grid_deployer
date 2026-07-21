@@ -3,6 +3,8 @@ package co.thouzands.worldgriddeployer.client;
 import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.SettingsRequestPayload;
 import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.SettingsSnapshotPayload;
 import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.SettingsUpdatePayload;
+import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.NameLookupRequestPayload;
+import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.NameLookupResultPayload;
 import java.util.List;
 import java.util.UUID;
 import javax.annotation.Nullable;
@@ -15,6 +17,9 @@ public final class WorldGridSettingsClient {
     @Nullable
     private static SettingsSnapshotPayload snapshot;
     private static long generation;
+    @Nullable
+    private static NameLookupResultPayload nameLookup;
+    private static long nameLookupGeneration;
 
     private WorldGridSettingsClient() {}
 
@@ -25,8 +30,26 @@ public final class WorldGridSettingsClient {
     }
 
     public static void update(long revision, String policy, List<UUID> retained, List<String> added) {
+        update(revision, policy, retained, List.of(), added);
+    }
+
+    public static void update(
+        long revision,
+        String policy,
+        List<UUID> retained,
+        List<String> retainedPending,
+        List<String> added
+    ) {
         if (supported()) {
-            PacketDistributor.sendToServer(new SettingsUpdatePayload(revision, policy, retained, added));
+            PacketDistributor.sendToServer(
+                new SettingsUpdatePayload(revision, policy, retained, retainedPending, added)
+            );
+        }
+    }
+
+    public static void lookupName(String name) {
+        if (supported()) {
+            PacketDistributor.sendToServer(new NameLookupRequestPayload(name));
         }
     }
 
@@ -40,6 +63,11 @@ public final class WorldGridSettingsClient {
         generation++;
     }
 
+    public static void receiveNameLookup(NameLookupResultPayload payload) {
+        nameLookup = payload;
+        nameLookupGeneration++;
+    }
+
     @Nullable
     public static SettingsSnapshotPayload snapshot() {
         return snapshot;
@@ -49,8 +77,19 @@ public final class WorldGridSettingsClient {
         return generation;
     }
 
+    @Nullable
+    public static NameLookupResultPayload nameLookup() {
+        return nameLookup;
+    }
+
+    public static long nameLookupGeneration() {
+        return nameLookupGeneration;
+    }
+
     public static void reset() {
         snapshot = null;
         generation++;
+        nameLookup = null;
+        nameLookupGeneration++;
     }
 }
