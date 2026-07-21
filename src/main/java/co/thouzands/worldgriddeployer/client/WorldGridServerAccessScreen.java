@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.UUID;
 import javax.annotation.Nullable;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
@@ -62,21 +63,21 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
             editable,
             tipTitle("worldgriddeployer.config.access.policy"),
             tip("worldgriddeployer.config.access.policy.tooltip"),
-            tip("worldgriddeployer.config.access.policy." + this.policy.serializedName() + ".tooltip"),
-            editable ? tip("worldgriddeployer.config.access.policy.cycle") : lockedTip()
+            tipCurrent("worldgriddeployer.config.access.policy." + this.policy.serializedName() + ".tooltip"),
+            editable ? tipAction("worldgriddeployer.config.access.policy.cycle") : lockedTip()
         );
 
-        this.username = new EditBox(
+        this.username = new PlaceholderEditBox(
             this.font,
             center - 154,
             top + 82,
             232,
             20,
-            Component.translatable("worldgriddeployer.config.access.username")
+            Component.translatable("worldgriddeployer.config.access.username"),
+            Component.translatable("worldgriddeployer.config.access.username.hint")
         );
         this.username.setMaxLength(64);
         this.username.setValue(this.inputValue);
-        this.username.setHint(Component.translatable("worldgriddeployer.config.access.username.hint"));
         this.username.setEditable(editable);
         this.addRenderableWidget(this.username);
 
@@ -110,7 +111,11 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
                     ? "worldgriddeployer.config.access.pending"
                     : "worldgriddeployer.config.access.whitelisted"),
                 row.tooltip(),
-                editable ? tip("worldgriddeployer.config.access.remove.tooltip") : lockedTip()
+                editable
+                    ? tipAction(row.pending()
+                        ? "worldgriddeployer.config.access.undo_add.tooltip"
+                        : "worldgriddeployer.config.access.remove.tooltip")
+                    : lockedTip()
             );
         }
 
@@ -262,7 +267,7 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
             .sorted(Comparator.comparing(PlayerEntry::name, String.CASE_INSENSITIVE_ORDER))
             .forEach(entry -> rows.add(new WhitelistRow(
                 Component.translatable("worldgriddeployer.config.access.entry", entry.name()),
-                tip("worldgriddeployer.config.access.entry.tooltip", entry.id()),
+                tipCurrent("worldgriddeployer.config.access.entry.tooltip", entry.id()),
                 false,
                 () -> this.retained.remove(entry.id())
             )));
@@ -270,7 +275,7 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
             .sorted(String.CASE_INSENSITIVE_ORDER)
             .forEach(name -> rows.add(new WhitelistRow(
                 Component.translatable("worldgriddeployer.config.access.entry.pending", name),
-                tip("worldgriddeployer.config.access.entry.pending.tooltip", name),
+                tipCurrent("worldgriddeployer.config.access.entry.pending.tooltip", name),
                 true,
                 () -> this.pendingAdds.removeIf(value -> value.equalsIgnoreCase(name))
             )));
@@ -367,6 +372,40 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
                 mouseX,
                 mouseY
             );
+        }
+    }
+
+    private static final class PlaceholderEditBox extends EditBox {
+        private final Font font;
+        private final Component placeholder;
+
+        private PlaceholderEditBox(
+            Font font,
+            int x,
+            int y,
+            int width,
+            int height,
+            Component narration,
+            Component placeholder
+        ) {
+            super(font, x, y, width, height, narration);
+            this.font = font;
+            this.placeholder = placeholder.copy().withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.ITALIC);
+        }
+
+        @Override
+        public void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
+            super.renderWidget(graphics, mouseX, mouseY, partialTicks);
+            if (this.getValue().isEmpty() && !this.isFocused()) {
+                graphics.drawString(
+                    this.font,
+                    this.placeholder,
+                    this.getX() + 4,
+                    this.getY() + (this.getHeight() - 8) / 2,
+                    0xff808080,
+                    false
+                );
+            }
         }
     }
 

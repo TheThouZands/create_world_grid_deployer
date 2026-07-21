@@ -169,11 +169,11 @@ The same controls are available from the Create-styled configuration screen.
 Open the mod's **Config** button in NeoForge's Mods list, or run the client
 command `/worldgriddeployer config` while connected. The server page always
 loads an authoritative snapshot. Players below permission level 3 can inspect
-it but every mutating control is locked; permission is checked again when Save
+it but every mutating control is locked; permission is checked again when Apply Changes
 reaches the server.
 
-GUI changes are staged locally. Save sends the selected policy, retained UUIDs,
-and newly typed usernames as one revision-checked edit. The server resolves all
+GUI changes remain local until **Apply Changes** sends the selected policy,
+retained UUIDs, and newly typed usernames as one revision-checked edit. The server resolves all
 names first and changes nothing if any name is unknown, the screen is stale, or
 permission has changed. Successful policy and whitelist changes are then
 persisted together. Online and already-listed names support Tab completion;
@@ -233,7 +233,7 @@ render through terrain. Historical overlays default to 200 ticks (10 seconds),
 accept 1 to 12,000 ticks, and fade independently.
 
 The **Debug Overlays** configuration page exposes the same categories with
-detailed hover explanations. Edits are staged until Done, so Cancel leaves the
+detailed hover explanations. Edits remain unsaved until Done, so Cancel leaves the
 active session unchanged. Lifetime controls cycle from 1 second through 10
 minutes; changing a lifetime starts a fresh history only for that category.
 Clear Data immediately releases collected render state while preserving the

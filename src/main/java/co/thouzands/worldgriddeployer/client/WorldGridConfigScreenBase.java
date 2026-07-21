@@ -9,7 +9,6 @@ import net.createmod.catnip.gui.element.TextStencilElement;
 import net.createmod.catnip.gui.widget.AbstractSimiWidget;
 import net.createmod.catnip.gui.widget.BoxWidget;
 import net.createmod.catnip.lang.FontHelper;
-import net.createmod.catnip.lang.FontHelper.Palette;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -77,6 +76,14 @@ abstract class WorldGridConfigScreenBase extends ConfigScreen {
         return Component.translatable(key, arguments).withStyle(ChatFormatting.GRAY);
     }
 
+    protected static Component tipCurrent(String key, Object... arguments) {
+        return Component.translatable(key, arguments).withStyle(ChatFormatting.AQUA);
+    }
+
+    protected static Component tipAction(String key, Object... arguments) {
+        return Component.translatable(key, arguments).withStyle(ChatFormatting.YELLOW);
+    }
+
     protected static List<Component> wrappedTooltip(Component... tooltip) {
         if (tooltip.length == 0) {
             return List.of();
@@ -84,7 +91,8 @@ abstract class WorldGridConfigScreenBase extends ConfigScreen {
         List<Component> lines = new ArrayList<>();
         lines.add(tooltip[0]);
         for (int index = 1; index < tooltip.length; index++) {
-            lines.addAll(FontHelper.cutTextComponent(tooltip[index], Palette.ALL_GRAY));
+            Component line = tooltip[index];
+            lines.addAll(FontHelper.cutTextComponent(line, line.getStyle(), line.getStyle()));
         }
         return lines;
     }
