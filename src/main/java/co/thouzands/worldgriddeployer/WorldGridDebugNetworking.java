@@ -55,6 +55,7 @@ public final class WorldGridDebugNetworking {
     private static final Set<UUID> REQUESTED_SUBSCRIBERS = new HashSet<>();
     private static final Set<UUID> ACTIVE_SUBSCRIBERS = new HashSet<>();
     private static final Map<ResourceKey<Level>, List<OutcomeEntry>> PENDING = new HashMap<>();
+    private static final Map<String, GameProfile> VERIFIED_LOOKUPS = new HashMap<>();
 
     private WorldGridDebugNetworking() {}
 
@@ -104,6 +105,7 @@ public final class WorldGridDebugNetworking {
         REQUESTED_SUBSCRIBERS.clear();
         ACTIVE_SUBSCRIBERS.clear();
         PENDING.clear();
+        VERIFIED_LOOKUPS.clear();
     }
 
     public static void registerPayloadHandlers(RegisterPayloadHandlersEvent event) {
@@ -299,6 +301,7 @@ public final class WorldGridDebugNetworking {
             }
             ServerPlayer online = server.getPlayerList().getPlayerByName(name);
             if (online != null) {
+                rememberProfile(online.getGameProfile());
                 sendNameLookupResult(
                     serverPlayer,
                     name,
@@ -323,6 +326,7 @@ public final class WorldGridDebugNetworking {
                 if (error != null) {
                     sendNameLookupResult(serverPlayer, name, NameLookupStatus.ERROR, "");
                 } else if (profile.isPresent()) {
+                    rememberProfile(profile.get());
                     sendNameLookupResult(
                         serverPlayer,
                         name,
@@ -357,8 +361,16 @@ public final class WorldGridDebugNetworking {
         if (online != null) {
             return Optional.of(online.getGameProfile());
         }
-        GameProfileCache cache = server.getProfileCache();
-        return cache == null ? Optional.empty() : cache.get(name);
+        if (!server.usesAuthentication()) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(VERIFIED_LOOKUPS.get(name.toLowerCase(Locale.ROOT)));
+    }
+
+    private static void rememberProfile(GameProfile profile) {
+        if (profile.getId() != null && profile.getName() != null) {
+            VERIFIED_LOOKUPS.put(profile.getName().toLowerCase(Locale.ROOT), profile);
+        }
     }
 
     private static void sendSettingsSnapshot(ServerPlayer player, SettingsResult result, String detail) {
