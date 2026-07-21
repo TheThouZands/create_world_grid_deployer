@@ -493,7 +493,7 @@ public abstract class DeployerBlockEntityMixin extends KineticBlockEntity
         this.worldgriddeployer$lastYawReference = null;
     }
 
-    @Inject(method = "addToGoggleTooltip", at = @At("TAIL"))
+    @Inject(method = "addToGoggleTooltip", at = @At("TAIL"), cancellable = true)
     private void worldgriddeployer$appendGoggleMode(
         List<Component> tooltip,
         boolean isPlayerSneaking,
