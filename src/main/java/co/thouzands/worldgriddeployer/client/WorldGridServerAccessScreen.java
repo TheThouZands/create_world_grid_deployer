@@ -1,5 +1,7 @@
 package co.thouzands.worldgriddeployer.client;
 
+import com.mojang.blaze3d.platform.GlStateManager;
+import com.mojang.blaze3d.systems.RenderSystem;
 import co.thouzands.worldgriddeployer.WorldGridDebugAccess;
 import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.PlayerEntry;
 import co.thouzands.worldgriddeployer.WorldGridDebugNetworking.SettingsSnapshotPayload;
@@ -13,29 +15,34 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import javax.annotation.Nullable;
+import net.createmod.catnip.config.ui.ConfigScreenList;
+import net.createmod.catnip.gui.element.TextStencilElement;
+import net.createmod.catnip.gui.widget.BoxWidget;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import org.lwjgl.glfw.GLFW;
 
 final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
-    private static final int ROWS_PER_PAGE = 3;
-
     @Nullable
     private SettingsSnapshotPayload snapshot;
     @Nullable
     private EditBox username;
+    @Nullable
+    private ConfigScreenList whitelist;
     private final Map<UUID, PlayerEntry> retained = new LinkedHashMap<>();
     private final List<String> pendingAdds = new ArrayList<>();
     private final Set<UUID> pendingRemovals = new HashSet<>();
     private WorldGridDebugAccess.Policy policy = WorldGridDebugAccess.Policy.OPS_ONLY;
     private long receivedGeneration = -1L;
     private boolean requested;
-    private int page;
+    private double whitelistScroll;
     private String inputValue = "";
     private Component status = Component.translatable("worldgriddeployer.config.access.loading");
 
@@ -95,15 +102,10 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
         );
 
         List<WhitelistRow> rows = rows();
-        int pageCount = Math.max(1, (rows.size() + ROWS_PER_PAGE - 1) / ROWS_PER_PAGE);
-        this.page = Math.min(this.page, pageCount - 1);
-        int from = this.page * ROWS_PER_PAGE;
-        int to = Math.min(rows.size(), from + ROWS_PER_PAGE);
-        for (int index = from; index < to; index++) {
-            WhitelistRow row = rows.get(index);
-            int rowY = top + 108 + (index - from) * 23;
-            this.addButton(
-                center - 154, rowY, 308, 19,
+        this.whitelist = new ConfigScreenList(this.minecraft, 320, 88, top + 106, 23);
+        this.whitelist.setX(center - 160);
+        for (WhitelistRow row : rows) {
+            this.whitelist.children().add(new WhitelistEntry(
                 row.label(),
                 () -> {
                     row.remove();
@@ -123,31 +125,10 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
                         case CURRENT -> "worldgriddeployer.config.access.remove.tooltip";
                     })
                     : lockedTip()
-            );
+            ));
         }
-
-        this.addButton(
-            center - 154, top + 178, 54, 18,
-            Component.literal("<"),
-            () -> {
-                this.page--;
-                this.rebuildPreservingInput();
-            },
-            this.page > 0,
-            tipTitle("worldgriddeployer.config.access.previous"),
-            tip("worldgriddeployer.config.access.page.tooltip")
-        );
-        this.addButton(
-            center + 100, top + 178, 54, 18,
-            Component.literal(">"),
-            () -> {
-                this.page++;
-                this.rebuildPreservingInput();
-            },
-            this.page + 1 < pageCount,
-            tipTitle("worldgriddeployer.config.access.next"),
-            tip("worldgriddeployer.config.access.page.tooltip")
-        );
+        this.whitelist.setScrollAmount(this.whitelistScroll);
+        this.addRenderableWidget(this.whitelist);
 
         boolean dirty = editable && this.isDirty();
         this.addButton(
@@ -225,7 +206,7 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
         this.pendingAdds.clear();
         this.pendingRemovals.clear();
         this.inputValue = "";
-        this.page = 0;
+        this.whitelistScroll = 0;
         this.status = resultMessage(received);
     }
 
@@ -251,7 +232,7 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
         this.inputValue = "";
         this.status = Component.translatable("worldgriddeployer.config.access.result.staged", name)
             .withStyle(ChatFormatting.GREEN);
-        this.page = Math.max(0, (rows().size() - 1) / ROWS_PER_PAGE);
+        this.whitelistScroll = Double.MAX_VALUE;
         this.rebuildWidgets();
     }
 
@@ -346,6 +327,9 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
         if (this.username != null) {
             this.inputValue = this.username.getValue();
         }
+        if (this.whitelist != null) {
+            this.whitelistScroll = this.whitelist.getScrollAmount();
+        }
         this.rebuildWidgets();
     }
 
@@ -388,12 +372,15 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
             : "worldgriddeployer.config.access.context.multiplayer";
         graphics.drawCenteredString(this.font, Component.translatable(contextKey), this.width / 2, top + 33, 0xffe0d8c8);
 
-        int entries = this.rows().size();
-        int pages = Math.max(1, (entries + ROWS_PER_PAGE - 1) / ROWS_PER_PAGE);
-        Component roster = entries == 0
-            ? Component.translatable("worldgriddeployer.config.access.empty")
-            : Component.translatable("worldgriddeployer.config.access.page", this.page + 1, pages, entries);
-        graphics.drawCenteredString(this.font, roster, this.width / 2, top + 183, 0xffb8b1a5);
+        if (this.rows().isEmpty()) {
+            graphics.drawCenteredString(
+                this.font,
+                Component.translatable("worldgriddeployer.config.access.empty"),
+                this.width / 2,
+                top + 144,
+                0xffb8b1a5
+            );
+        }
         graphics.drawCenteredString(this.font, this.status, this.width / 2, top + 204, 0xffffffff);
     }
 
@@ -410,6 +397,79 @@ final class WorldGridServerAccessScreen extends WorldGridConfigScreenBase {
                 mouseX,
                 mouseY
             );
+        }
+    }
+
+    private static final class WhitelistEntry extends ConfigScreenList.Entry {
+        private final ScrollRowBoxWidget button;
+
+        private WhitelistEntry(
+            Component label,
+            Runnable callback,
+            boolean active,
+            Component... tooltip
+        ) {
+            TextStencilElement text = new TextStencilElement(Minecraft.getInstance().font, label.copy())
+                .centered(true, true);
+            this.button = new ScrollRowBoxWidget(0, 0, 300, 19).showingElement(text);
+            text.withElementRenderer(BoxWidget.gradientFactory.apply(this.button));
+            this.button.withCallback(callback);
+            this.button.setActive(active);
+            this.button.updateGradientFromState();
+            this.button.getToolTip().addAll(wrappedTooltip(tooltip));
+            this.listeners.add(this.button);
+        }
+
+        @Override
+        public void tick() {
+            this.button.tick();
+        }
+
+        @Override
+        public void render(
+            GuiGraphics graphics,
+            int index,
+            int y,
+            int x,
+            int width,
+            int height,
+            int mouseX,
+            int mouseY,
+            boolean hovered,
+            float partialTicks
+        ) {
+            this.button.setX(x + 2);
+            this.button.setY(y + 2);
+            this.button.setWidth(width - 4);
+            this.button.setHeight(height - 4);
+            this.button.render(graphics, mouseX, mouseY, partialTicks);
+            if (this.button.isHovered()) {
+                RenderSystem.disableScissor();
+                this.button.renderTooltipAboveList(graphics, mouseX, mouseY, partialTicks);
+                graphics.flush();
+                GlStateManager._enableScissorTest();
+            }
+        }
+
+        @Override
+        public Component getNarration() {
+            return CommonComponents.EMPTY;
+        }
+    }
+
+    /** Lets a row stay clipped while its tooltip renders above the list's scissor. */
+    private static final class ScrollRowBoxWidget extends BoxWidget {
+        private ScrollRowBoxWidget(int x, int y, int width, int height) {
+            super(x, y, width, height);
+        }
+
+        private void renderTooltipAboveList(
+            GuiGraphics graphics,
+            int mouseX,
+            int mouseY,
+            float partialTicks
+        ) {
+            this.renderTooltip(graphics, mouseX, mouseY, partialTicks);
         }
     }
 
