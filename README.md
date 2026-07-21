@@ -10,6 +10,10 @@ sampled in world coordinates every Sable server tick and swept across the block
 grid, allowing fast contraptions to build continuous bridges, walls, or tunnels
 without depending on Create's ordinary RPM-driven deployer cycle.
 
+## Showcase
+
+![A Sable vehicle using World-Grid deployers to build a platform across water](docs/media/world-grid-deployer-vehicle.png)
+
 ## Compatibility and installation
 
 - Minecraft 1.21.1
