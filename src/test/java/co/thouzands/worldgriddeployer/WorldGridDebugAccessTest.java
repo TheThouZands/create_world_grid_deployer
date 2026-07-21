@@ -70,4 +70,21 @@ final class WorldGridDebugAccessTest {
 
         assertEquals(WorldGridDebugAccess.Policy.OPS_ONLY, loaded.policy());
     }
+
+    @Test
+    void replacesGuiSettingsAsOneRevision() {
+        WorldGridDebugAccess access = new WorldGridDebugAccess();
+        UUID original = UUID.randomUUID();
+        UUID replacement = UUID.randomUUID();
+        access.allow(original);
+        long before = access.revision();
+
+        assertTrue(access.replaceSettings(WorldGridDebugAccess.Policy.WHITELIST, Set.of(replacement)));
+
+        assertEquals(before + 1, access.revision());
+        assertEquals(WorldGridDebugAccess.Policy.WHITELIST, access.policy());
+        assertEquals(Set.of(replacement), access.allowedPlayers());
+        assertFalse(access.replaceSettings(WorldGridDebugAccess.Policy.WHITELIST, Set.of(replacement)));
+        assertEquals(before + 1, access.revision());
+    }
 }

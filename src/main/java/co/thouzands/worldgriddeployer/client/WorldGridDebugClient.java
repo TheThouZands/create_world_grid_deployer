@@ -102,6 +102,60 @@ public final class WorldGridDebugClient {
         HISTORY.recordOutcomes(entries);
     }
 
+    public static DebugSettings settings() {
+        return new DebugSettings(
+            HISTORY.targetsEnabled(),
+            HISTORY.pointPathEnabled(),
+            HISTORY.pointLifetimeTicks(),
+            HISTORY.blockTrailEnabled(),
+            HISTORY.blockLifetimeTicks(),
+            HISTORY.outcomesEnabled(),
+            HISTORY.outcomeLifetimeTicks()
+        );
+    }
+
+    public static void applySettings(DebugSettings settings) {
+        HISTORY.setTargetsEnabled(settings.targetsEnabled());
+        applyPointPath(settings.pointPathEnabled(), settings.pointLifetimeTicks());
+        applyBlockTrail(settings.blockTrailEnabled(), settings.blockLifetimeTicks());
+
+        boolean outcomeSubscriptionChanged = HISTORY.outcomesEnabled() != settings.outcomesEnabled();
+        if (settings.outcomesEnabled()) {
+            if (!HISTORY.outcomesEnabled() || HISTORY.outcomeLifetimeTicks() != settings.outcomeLifetimeTicks()) {
+                HISTORY.startOutcomes(settings.outcomeLifetimeTicks());
+            }
+        } else if (HISTORY.outcomesEnabled()) {
+            HISTORY.stopOutcomes();
+        }
+        if (outcomeSubscriptionChanged) {
+            sendOutcomeSubscription(settings.outcomesEnabled());
+        }
+    }
+
+    public static void clearDebugData() {
+        HISTORY.clearData();
+    }
+
+    private static void applyPointPath(boolean enabled, int lifetimeTicks) {
+        if (enabled) {
+            if (!HISTORY.pointPathEnabled() || HISTORY.pointLifetimeTicks() != lifetimeTicks) {
+                HISTORY.startPointPath(lifetimeTicks);
+            }
+        } else if (HISTORY.pointPathEnabled()) {
+            HISTORY.stopPointPath();
+        }
+    }
+
+    private static void applyBlockTrail(boolean enabled, int lifetimeTicks) {
+        if (enabled) {
+            if (!HISTORY.blockTrailEnabled() || HISTORY.blockLifetimeTicks() != lifetimeTicks) {
+                HISTORY.startBlockTrail(lifetimeTicks);
+            }
+        } else if (HISTORY.blockTrailEnabled()) {
+            HISTORY.stopBlockTrail();
+        }
+    }
+
     @SubscribeEvent
     public static void registerCommands(RegisterClientCommandsEvent event) {
         CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
@@ -118,6 +172,11 @@ public final class WorldGridDebugClient {
                 .then(literal("off").executes(WorldGridDebugClient::disableAll)))
             .then(literal("clear").executes(WorldGridDebugClient::clearAll))
             .then(literal("status").executes(WorldGridDebugClient::status)));
+        root.then(literal("config").executes(context -> {
+            Minecraft minecraft = Minecraft.getInstance();
+            minecraft.setScreen(new WorldGridConfigScreen(minecraft.screen));
+            return 1;
+        }));
 
         dispatcher.register(root);
     }
@@ -132,6 +191,7 @@ public final class WorldGridDebugClient {
     @SubscribeEvent
     public static void loggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
         HISTORY.resetSession();
+        WorldGridSettingsClient.reset();
     }
 
     @SubscribeEvent
@@ -139,6 +199,7 @@ public final class WorldGridDebugClient {
         // Defensive reset for connection paths where the prior logout event did
         // not run (for example, an interrupted or failed connection transition).
         HISTORY.resetSession();
+        WorldGridSettingsClient.reset();
     }
 
     @SubscribeEvent
@@ -492,4 +553,14 @@ public final class WorldGridDebugClient {
             .setColor(red, green, blue, alpha)
             .setNormal(pose, normalX, normalY, normalZ);
     }
+
+    public record DebugSettings(
+        boolean targetsEnabled,
+        boolean pointPathEnabled,
+        int pointLifetimeTicks,
+        boolean blockTrailEnabled,
+        int blockLifetimeTicks,
+        boolean outcomesEnabled,
+        int outcomeLifetimeTicks
+    ) {}
 }

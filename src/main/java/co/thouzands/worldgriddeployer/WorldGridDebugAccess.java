@@ -6,6 +6,8 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.Locale;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -44,6 +46,7 @@ public final class WorldGridDebugAccess extends SavedData {
 
     private Policy policy = Policy.OPS_ONLY;
     private final Set<UUID> allowedPlayers = new LinkedHashSet<>();
+    private long revision;
 
     public WorldGridDebugAccess() {}
 
@@ -73,6 +76,15 @@ public final class WorldGridDebugAccess extends SavedData {
         return Set.copyOf(this.allowedPlayers);
     }
 
+    /**
+     * Monotonic for the lifetime of this loaded world. It is intentionally not
+     * persisted: it exists only to reject stale edits from currently connected
+     * configuration screens.
+     */
+    public long revision() {
+        return this.revision;
+    }
+
     public boolean allows(UUID playerId, boolean operator) {
         return switch (this.policy) {
             case DISABLED -> false;
@@ -87,14 +99,14 @@ public final class WorldGridDebugAccess extends SavedData {
             return false;
         }
         this.policy = policy;
-        this.setDirty();
+        this.changed();
         return true;
     }
 
     public boolean allow(UUID playerId) {
         boolean changed = this.allowedPlayers.add(playerId);
         if (changed) {
-            this.setDirty();
+            this.changed();
         }
         return changed;
     }
@@ -102,7 +114,7 @@ public final class WorldGridDebugAccess extends SavedData {
     public boolean revoke(UUID playerId) {
         boolean changed = this.allowedPlayers.remove(playerId);
         if (changed) {
-            this.setDirty();
+            this.changed();
         }
         return changed;
     }
@@ -111,9 +123,29 @@ public final class WorldGridDebugAccess extends SavedData {
         int removed = this.allowedPlayers.size();
         if (removed > 0) {
             this.allowedPlayers.clear();
-            this.setDirty();
+            this.changed();
         }
         return removed;
+    }
+
+    /** Applies a GUI edit as one logical mutation and one revision change. */
+    public boolean replaceSettings(Policy policy, Collection<UUID> allowedPlayers) {
+        Objects.requireNonNull(policy, "policy");
+        LinkedHashSet<UUID> replacement = new LinkedHashSet<>(allowedPlayers);
+        if (this.policy == policy && this.allowedPlayers.equals(replacement)) {
+            return false;
+        }
+
+        this.policy = policy;
+        this.allowedPlayers.clear();
+        this.allowedPlayers.addAll(replacement);
+        this.changed();
+        return true;
+    }
+
+    private void changed() {
+        this.revision++;
+        this.setDirty();
     }
 
     @Override
@@ -252,7 +284,7 @@ public final class WorldGridDebugAccess extends SavedData {
         return removed;
     }
 
-    private static String profileName(MinecraftServer server, UUID playerId) {
+    public static String profileName(MinecraftServer server, UUID playerId) {
         ServerPlayer online = server.getPlayerList().getPlayer(playerId);
         if (online != null) {
             return online.getGameProfile().getName();
@@ -286,14 +318,18 @@ public final class WorldGridDebugAccess extends SavedData {
             return this.description;
         }
 
-        static Policy byName(String name) {
+        public static Policy byName(String name) {
+            return find(name).orElse(OPS_ONLY);
+        }
+
+        public static Optional<Policy> find(String name) {
             String normalized = name.toLowerCase(Locale.ROOT);
             for (Policy policy : values()) {
                 if (policy.serializedName.equals(normalized)) {
-                    return policy;
+                    return Optional.of(policy);
                 }
             }
-            return OPS_ONLY;
+            return Optional.empty();
         }
     }
 }
